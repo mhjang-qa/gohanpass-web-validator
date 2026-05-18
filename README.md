@@ -8,7 +8,7 @@
 cd "web-auto-vaildator(go-hanpass)"
 python -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m playwright install chromium
+.venv/bin/python -m playwright install chromium chromium-headless-shell
 cp .env.example .env
 .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080
 ```
@@ -61,7 +61,7 @@ Render Web Service에서 아래처럼 설정합니다.
 - Build Command:
 
 ```bash
-pip install -r requirements.txt && python -m playwright install --with-deps chromium
+pip install -r requirements.txt && python -m playwright install --with-deps chromium chromium-headless-shell
 ```
 
 - Start Command:

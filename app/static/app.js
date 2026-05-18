@@ -35,7 +35,7 @@ function renderScenarios() {
   for (const scenario of state.scenarios) {
     const label = document.createElement("label");
     label.className = "scenario";
-    label.innerHTML = `<input type="checkbox" data-scenario value="${scenario.name}" checked><span>${scenario.name}</span>`;
+    label.innerHTML = `<input type="checkbox" data-scenario value="${scenario.name}"><span>${scenario.name}</span>`;
     list.appendChild(label);
   }
 }
@@ -58,7 +58,7 @@ function applyScheduleToForm(schedule) {
   renderDays(schedule.days || []);
 
   for (const checkbox of document.querySelectorAll("[data-scenario]")) {
-    checkbox.checked = !schedule.scenarios?.length || schedule.scenarios.includes(checkbox.value);
+    checkbox.checked = Boolean(schedule.scenarios?.length && schedule.scenarios.includes(checkbox.value));
   }
 
   document.querySelector("#scheduleState").textContent = schedule.enabled

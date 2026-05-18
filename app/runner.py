@@ -1,5 +1,6 @@
 import asyncio
 import importlib.util
+import subprocess
 import sys
 import uuid
 from datetime import datetime
@@ -32,9 +33,9 @@ def classify_status(status: str) -> str:
 
 async def create_page():
     playwright = await async_playwright().start()
-    browser = await playwright.chromium.launch(
-        headless=HEADLESS,
-        args=[
+    launch_options = {
+        "headless": HEADLESS,
+        "args": [
             "--window-size=500,920",
             "--force-device-scale-factor=1",
             "--disable-features=TranslateUI",
@@ -42,7 +43,47 @@ async def create_page():
             "--disable-translate",
             "--no-first-run",
         ],
-    )
+    }
+
+    async def launch_browser():
+        return await playwright.chromium.launch(**launch_options)
+
+    async def install_browsers():
+        command = [
+            sys.executable,
+            "-m",
+            "playwright",
+            "install",
+            "chromium",
+            "chromium-headless-shell",
+        ]
+        await asyncio.to_thread(
+            subprocess.run,
+            command,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    def should_recover(error: Exception) -> bool:
+        message = str(error)
+        return "Executable doesn't exist" in message or "Looks like Playwright was just installed" in message
+
+    try:
+        browser = await launch_browser()
+    except Exception as exc:
+        if not should_recover(exc):
+            await playwright.stop()
+            raise
+        try:
+            await install_browsers()
+            browser = await launch_browser()
+        except Exception as install_exc:
+            await playwright.stop()
+            raise RuntimeError(
+                "Playwright 브라우저 자동 복구에 실패했습니다. Render 빌드 명령과 네트워크 상태를 확인하세요."
+            ) from install_exc
+
     context = await browser.new_context(
         viewport={"width": 500, "height": 812},
         screen={"width": 500, "height": 812},
