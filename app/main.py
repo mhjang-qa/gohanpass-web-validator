@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.config import BASE_DIR
-from app.runner import run_scenarios
+import app.runner as runner
 from app.scenarios import list_scenarios
 from app.scheduler import apply_schedule, start_scheduler, stop_scheduler
 from app.storage import list_runs, load_run, load_schedule
@@ -29,6 +29,14 @@ class ScheduleRequest(BaseModel):
     days: list[str]
     scenarios: list[str]
     notion_upload: bool = True
+
+
+@app.get("/api/current-run")
+async def api_current_run():
+    if not runner.CURRENT_RUN_ID:
+        return {"run": None}
+    run = load_run(runner.CURRENT_RUN_ID)
+    return {"run": run}
 
 
 @app.on_event("startup")
@@ -69,7 +77,7 @@ async def api_start_run(request: RunRequest):
     if not request.scenarios:
         raise HTTPException(status_code=400, detail="scenarios required")
     try:
-        run = await run_scenarios(request.scenarios, notion_upload=request.notion_upload, source="manual")
+        run = runner.start_run_scenarios(request.scenarios, notion_upload=request.notion_upload, source="manual")
         return run
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

@@ -16,6 +16,8 @@ from app.storage import save_run
 
 
 RUN_LOCK = asyncio.Lock()
+CURRENT_RUN_ID: str | None = None
+RUN_TASKS: dict[str, asyncio.Task] = {}
 
 
 def now_iso() -> str:
@@ -29,6 +31,115 @@ def classify_status(status: str) -> str:
     if upper.startswith(("NA", "N/A")):
         return "na"
     return "fail"
+
+
+def create_run_record(scenario_names: list[str], source: str, run_id: str | None = None) -> tuple[dict, list[Path]]:
+    run_id = run_id or datetime.now(ZoneInfo(TIMEZONE)).strftime("%Y%m%d_%H%M%S")
+    scenario_paths = resolve_scenario_paths(scenario_names)
+    run = {
+        "id": run_id,
+        "source": source,
+        "status": "running",
+        "started_at": now_iso(),
+        "finished_at": None,
+        "scenarios": [],
+        "summary": {"total": 0, "pass": 0, "fail": 0, "na": 0},
+        "logs": [],
+        "attachments": [],
+        "notion": None,
+    }
+    save_run(run)
+    return run, scenario_paths
+
+
+def append_run_log(run: dict, message: str):
+    run["logs"].append(message)
+    save_run(run)
+
+
+async def execute_run(run: dict, scenario_paths: list[Path], notion_upload: bool = True) -> dict:
+    global CURRENT_RUN_ID
+
+    CURRENT_RUN_ID = run["id"]
+    playwright = browser = context = page = None
+    try:
+        playwright, browser, context, page = await create_page()
+        for idx, path in enumerate(scenario_paths, 1):
+            append_run_log(run, f"[{idx}/{len(scenario_paths)}] {path.name} 시작")
+            scenario_result = {"name": path.name, "results": []}
+            try:
+                module = import_scenario(path)
+                if hasattr(module, "log"):
+                    module.log.logger = lambda message: append_run_log(run, message)
+                auth_module = sys.modules.get("scenarios._auth")
+                if auth_module and hasattr(auth_module, "log"):
+                    auth_module.log.logger = lambda message: append_run_log(run, message)
+
+                raw_results = await module.run(page)
+            except Exception as exc:
+                raw_results = [("scenario_execution", f"FAIL ({exc})")]
+                append_run_log(run, f"{path.name} 실패: {exc}")
+
+            for name, status in raw_results:
+                kind = classify_status(status)
+                run["summary"]["total"] += 1
+                run["summary"][kind] += 1
+                scenario_result["results"].append({"name": str(name), "status": str(status)})
+
+            run["scenarios"].append(scenario_result)
+            save_run(run)
+
+        screenshot_path = OUTPUT_DIR / f"{run['id']}.png"
+        await page.screenshot(path=str(screenshot_path), full_page=True)
+        run["attachments"].append(str(screenshot_path))
+
+        log_path = OUTPUT_DIR / f"{run['id']}.log"
+        log_path.write_text("\n".join(run["logs"]), encoding="utf-8")
+        run["attachments"].append(str(log_path))
+
+        if notion_upload:
+            notion_result = upload_to_notion(run)
+            run["notion"] = {"uploaded": True, "page_id": notion_result.get("id") if notion_result else None}
+
+        run["status"] = "completed" if run["summary"]["fail"] == 0 else "failed"
+        return run
+    except Exception as exc:
+        run["status"] = "failed"
+        append_run_log(run, f"실행 오류: {exc}")
+        return run
+    finally:
+        run["finished_at"] = now_iso()
+        save_run(run)
+        CURRENT_RUN_ID = None
+        if browser:
+            await browser.close()
+        if playwright:
+            await playwright.stop()
+
+
+async def run_scenarios(scenario_names: list[str], notion_upload: bool = True, source: str = "manual", run_id: str | None = None) -> dict:
+    if RUN_LOCK.locked() or any(not task.done() for task in RUN_TASKS.values()):
+        raise RuntimeError("이미 실행 중인 작업이 있습니다.")
+
+    async with RUN_LOCK:
+        run, scenario_paths = create_run_record(scenario_names, source, run_id=run_id)
+        return await execute_run(run, scenario_paths, notion_upload=notion_upload)
+
+
+def start_run_scenarios(scenario_names: list[str], notion_upload: bool = True, source: str = "manual", run_id: str | None = None) -> dict:
+    if RUN_LOCK.locked() or any(not task.done() for task in RUN_TASKS.values()):
+        raise RuntimeError("이미 실행 중인 작업이 있습니다.")
+
+    run, scenario_paths = create_run_record(scenario_names, source, run_id=run_id)
+    task = asyncio.create_task(run_scenarios_background(run, scenario_paths, notion_upload=notion_upload))
+    RUN_TASKS[run["id"]] = task
+    task.add_done_callback(lambda _: RUN_TASKS.pop(run["id"], None))
+    return run
+
+
+async def run_scenarios_background(run: dict, scenario_paths: list[Path], notion_upload: bool = True) -> dict:
+    async with RUN_LOCK:
+        return await execute_run(run, scenario_paths, notion_upload=notion_upload)
 
 
 async def create_page():
@@ -120,79 +231,3 @@ def import_scenario(path: Path):
     if not hasattr(module, "run"):
         raise RuntimeError(f"run(page) 함수 없음: {path.name}")
     return module
-
-
-async def run_scenarios(scenario_names: list[str], notion_upload: bool = True, source: str = "manual") -> dict:
-    if RUN_LOCK.locked():
-        raise RuntimeError("이미 실행 중인 작업이 있습니다.")
-
-    async with RUN_LOCK:
-        run_id = datetime.now(ZoneInfo(TIMEZONE)).strftime("%Y%m%d_%H%M%S")
-        scenario_paths = resolve_scenario_paths(scenario_names)
-        run = {
-            "id": run_id,
-            "source": source,
-            "status": "running",
-            "started_at": now_iso(),
-            "finished_at": None,
-            "scenarios": [],
-            "summary": {"total": 0, "pass": 0, "fail": 0, "na": 0},
-            "logs": [],
-            "attachments": [],
-            "notion": None,
-        }
-        save_run(run)
-
-        playwright = browser = context = page = None
-        try:
-            playwright, browser, context, page = await create_page()
-            for idx, path in enumerate(scenario_paths, 1):
-                run["logs"].append(f"[{idx}/{len(scenario_paths)}] {path.name} 시작")
-                scenario_result = {"name": path.name, "results": []}
-                try:
-                    module = import_scenario(path)
-                    if hasattr(module, "log"):
-                        module.log.logger = run["logs"].append
-                    auth_module = sys.modules.get("scenarios._auth")
-                    if auth_module and hasattr(auth_module, "log"):
-                        auth_module.log.logger = run["logs"].append
-
-                    raw_results = await module.run(page)
-                except Exception as exc:
-                    raw_results = [("scenario_execution", f"FAIL ({exc})")]
-                    run["logs"].append(f"{path.name} 실패: {exc}")
-
-                for name, status in raw_results:
-                    kind = classify_status(status)
-                    run["summary"]["total"] += 1
-                    run["summary"][kind] += 1
-                    scenario_result["results"].append({"name": str(name), "status": str(status)})
-
-                run["scenarios"].append(scenario_result)
-                save_run(run)
-
-            screenshot_path = OUTPUT_DIR / f"{run_id}.png"
-            await page.screenshot(path=str(screenshot_path), full_page=True)
-            run["attachments"].append(str(screenshot_path))
-
-            log_path = OUTPUT_DIR / f"{run_id}.log"
-            log_path.write_text("\n".join(run["logs"]), encoding="utf-8")
-            run["attachments"].append(str(log_path))
-
-            if notion_upload:
-                notion_result = upload_to_notion(run)
-                run["notion"] = {"uploaded": True, "page_id": notion_result.get("id") if notion_result else None}
-
-            run["status"] = "completed" if run["summary"]["fail"] == 0 else "failed"
-            return run
-        except Exception as exc:
-            run["status"] = "failed"
-            run["logs"].append(f"실행 오류: {exc}")
-            return run
-        finally:
-            run["finished_at"] = now_iso()
-            save_run(run)
-            if browser:
-                await browser.close()
-            if playwright:
-                await playwright.stop()

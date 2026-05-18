@@ -11,6 +11,7 @@ const dayLabels = [
 const state = {
   scenarios: [],
   schedule: null,
+  refreshTimer: null,
 };
 
 async function api(path, options = {}) {
@@ -76,7 +77,7 @@ function renderRuns(runs) {
 
   for (const run of runs) {
     const item = document.createElement("div");
-    item.className = "run";
+    item.className = `run ${run.status === "running" ? "live" : ""}`;
     const logs = (run.logs || []).slice(-18).join("\n");
     item.innerHTML = `
       <div>
@@ -94,6 +95,34 @@ function renderRuns(runs) {
   }
 }
 
+function updateScheduleStateText(run, schedule) {
+  const target = document.querySelector("#scheduleState");
+  if (run?.status === "running") {
+    target.textContent = `실행중: ${run.id}`;
+    target.classList.add("live");
+    return;
+  }
+
+  target.classList.remove("live");
+  target.textContent = schedule?.enabled ? `스케줄 활성: ${schedule.time}` : "스케줄 비활성";
+}
+
+function setPolling(enabled) {
+  if (enabled) {
+    if (!state.refreshTimer) {
+      state.refreshTimer = window.setInterval(() => {
+        refresh().catch(() => {});
+      }, 2000);
+    }
+    return;
+  }
+
+  if (state.refreshTimer) {
+    window.clearInterval(state.refreshTimer);
+    state.refreshTimer = null;
+  }
+}
+
 async function refresh() {
   const [scenarioData, schedule, runData] = await Promise.all([
     api("/api/scenarios"),
@@ -105,6 +134,9 @@ async function refresh() {
   renderScenarios();
   applyScheduleToForm(schedule);
   renderRuns(runData.runs);
+  const runningRun = runData.runs.find((run) => run.status === "running");
+  updateScheduleStateText(runningRun, schedule);
+  setPolling(Boolean(runningRun));
 }
 
 async function runNow() {
@@ -112,13 +144,17 @@ async function runNow() {
   button.disabled = true;
   button.textContent = "실행중";
   try {
-    await api("/api/runs", {
+    const run = await api("/api/runs", {
       method: "POST",
       body: JSON.stringify({
         scenarios: selectedScenarios(),
         notion_upload: document.querySelector("#notionUpload").checked,
       }),
     });
+    if (run?.id) {
+      updateScheduleStateText(run, state.schedule);
+      setPolling(true);
+    }
     await refresh();
   } finally {
     button.disabled = false;
