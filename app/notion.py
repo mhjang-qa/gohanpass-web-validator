@@ -1,7 +1,12 @@
 from pathlib import Path
+import re
 
 from app.config import NOTION_UPLOAD
 from app.integrations.notion_uploader import NotionUploader
+
+
+def _compact_status(value: str) -> str:
+    return re.sub(r"\s+", " ", str(value)).strip()
 
 
 def upload_to_notion(run: dict):
@@ -12,7 +17,7 @@ def upload_to_notion(run: dict):
     for scenario in run["scenarios"]:
         result_lines.append(f"[{scenario['name']}]")
         for item in scenario["results"]:
-            result_lines.append(f"- {item['name']}: {item['status']}")
+            result_lines.append(f"- {item['name']}: {_compact_status(item['status'])}")
         result_lines.append("")
 
     uploader = NotionUploader()

@@ -352,11 +352,14 @@ class NotionUploader:
                 scenarios.append(current)
                 continue
 
+            if not text.startswith("- "):
+                continue
+
             if current is None:
                 current = {"name": "테스트 결과", "tests": []}
                 scenarios.append(current)
 
-            clean_text = text[2:] if text.startswith("- ") else text
+            clean_text = text[2:]
             if ": " in clean_text:
                 name, status = clean_text.split(": ", 1)
             else:
