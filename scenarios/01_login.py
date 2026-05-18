@@ -150,10 +150,25 @@ async def run(page):
     await step("title_check", check_title)
 
     # 3. 로그인 진입 버튼 클릭
-    await page.locator(
-        "button:has(img[src*='ico16-btn-arrow-right-grayscale-05.svg'])"
-    ).click()
+    async def login_entry_click():
+        selectors = [
+            "button:has(img[src*='ico16-btn-arrow-right-grayscale-05.svg'])",
+            "button:has-text('로그인')",
+            "text=로그인",
+        ]
+        last_error = None
+        for selector in selectors:
+            try:
+                target = page.locator(selector).first
+                if await target.count() == 0:
+                    continue
+                await target.click(timeout=5000, force=True)
+                return
+            except Exception as e:
+                last_error = e
+        raise Exception(f"로그인 진입 버튼 클릭 실패: {last_error}")
 
+    await step("login_entry_click", login_entry_click)
     await asyncio.sleep(3)
 
     # 4. 이메일 입력

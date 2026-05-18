@@ -113,7 +113,7 @@ async def open_login_form(page: Page):
             target = page.locator(selector).first
             if await target.count() == 0:
                 continue
-            await target.click(timeout=5000)
+            await target.click(timeout=5000, force=True)
             await asyncio.sleep(1.5)
             return
         except Exception as e:
