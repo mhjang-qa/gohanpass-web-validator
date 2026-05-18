@@ -102,6 +102,11 @@ async def enter_password_by_keypad(page: Page, password: str):
 
 async def open_login_form(page: Page):
     selectors = [
+        "button:has-text('로그인하기')",
+        "a:has-text('로그인하기')",
+        "[role='button']:has-text('로그인하기')",
+        ".cursor-pointer:has-text('로그인하기')",
+        "text=로그인하기",
         "button:has(img[src*='ico16-btn-arrow-right-grayscale-05.svg'])",
         "button:has-text('로그인')",
         "text=로그인",
@@ -118,6 +123,29 @@ async def open_login_form(page: Page):
             return
         except Exception as e:
             last_error = e
+
+    try:
+        clicked = await page.locator("text=로그인하기").first.evaluate(
+            """node => {
+                const clickable = node.closest("button, a, [role='button'], .cursor-pointer");
+                if (clickable) {
+                    clickable.click();
+                    return true;
+                }
+                const rect = node.getBoundingClientRect();
+                const target = document.elementFromPoint(rect.right + 24, rect.top + rect.height / 2);
+                if (target) {
+                    target.click();
+                    return true;
+                }
+                return false;
+            }"""
+        )
+        if clicked:
+            await asyncio.sleep(1.5)
+            return
+    except Exception as e:
+        last_error = e
 
     if await page.get_by_placeholder("이메일").count() > 0:
         return

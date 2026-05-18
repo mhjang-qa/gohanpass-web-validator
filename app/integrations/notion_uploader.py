@@ -321,6 +321,7 @@ class NotionUploader:
             "password_input_click": "비밀번호 입력창 선택",
             "password_keypad_input": "보안 키패드로 비밀번호 입력",
             "confirm_click": "로그인 확인 버튼 선택",
+            "login_flow": "웹 로그인 진입 및 자동 로그인 수행",
             "login_result_check": "로그인 성공 및 보호 메뉴 접근 확인",
             "region_open_click": "지역 선택 바텀시트 열기",
             "region_close_click": "지역 선택 바텀시트 닫기",
