@@ -8,7 +8,7 @@
 cd "web-auto-vaildator(go-hanpass)"
 python -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/playwright install chromium
+.venv/bin/python -m playwright install chromium
 cp .env.example .env
 .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080
 ```
@@ -40,8 +40,46 @@ docker run -d \
 
 ## 환경변수
 
-- `SCENARIO_DIR`: 실행할 시나리오 `.py` 폴더
-- `MOBILE_VALIDATOR_DIR`: 기존 GUI 프로젝트 경로. Notion 업로더 재사용에 필요
-- `HEADLESS`: 서버 실행 시 `true` 권장
-- `NOTION_UPLOAD`: 실행 완료 후 Notion 자동 등록 여부
-- `NOTION_TOKEN`, `NOTION_DB_ID`: Notion 연동값
+필수:
+- `NOTION_TOKEN`: Notion Internal Integration Secret
+- `NOTION_DB_ID`: 최종 저장할 Notion 데이터베이스 ID
+
+권장:
+- `HEADLESS=true`: Render 같은 서버 환경에서는 `true`가 기본
+- `NOTION_UPLOAD=true`: 실행 결과를 Notion에 자동 업로드
+- `TIMEZONE=Asia/Seoul`: 스케줄 기준 시간대
+
+로컬 몽레포용 오버라이드:
+- `SCENARIO_DIR`: 시나리오 `.py` 폴더
+- `MOBILE_VALIDATOR_DIR`: 기존 GUI 프로젝트 경로. 현재 구조에서는 Notion 업로더 재사용에만 사용
+
+## Render 설정
+
+Render Web Service에서 아래처럼 설정합니다.
+
+- Root Directory: 비움
+- Build Command:
+
+```bash
+pip install -r requirements.txt && python -m playwright install --with-deps chromium
+```
+
+- Start Command:
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
+
+환경변수는 최소 아래 5개를 넣습니다.
+
+```env
+NOTION_TOKEN=...
+NOTION_DB_ID=5ad73fbd195182bcb4b201fb9d76815f
+HEADLESS=true
+NOTION_UPLOAD=true
+TIMEZONE=Asia/Seoul
+```
+
+주의:
+- Render의 Build Command에 `playwright install ...`를 직접 쓰면 실패합니다.
+- 반드시 `python -m playwright install ...` 형태로 호출해야 합니다.

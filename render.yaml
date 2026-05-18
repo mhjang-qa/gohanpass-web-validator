@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: go-hanpass-web-validator
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt && python -m playwright install --with-deps chromium
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: NOTION_TOKEN
+        sync: false
+      - key: NOTION_DB_ID
+        value: 5ad73fbd195182bcb4b201fb9d76815f
+      - key: HEADLESS
+        value: "true"
+      - key: NOTION_UPLOAD
+        value: "true"
+      - key: TIMEZONE
+        value: Asia/Seoul

@@ -21,7 +21,7 @@ def resolve_path(value: str, default: Path) -> Path:
     return path.resolve()
 
 
-SCENARIO_DIR = resolve_path("SCENARIO_DIR", WORKSPACE_DIR / "mobile-web-validator" / "scenarios")
+SCENARIO_DIR = resolve_path("SCENARIO_DIR", BASE_DIR / "scenarios")
 MOBILE_VALIDATOR_DIR = resolve_path("MOBILE_VALIDATOR_DIR", WORKSPACE_DIR / "mobile-web-validator")
 DATA_DIR = BASE_DIR / "data"
 RUNS_DIR = DATA_DIR / "runs"
