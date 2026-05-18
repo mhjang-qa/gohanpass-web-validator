@@ -16,8 +16,10 @@ async def run(page):
         try:
             await func()
             result.append((name, "PASS"))
+            return True
         except Exception as e:
             result.append((name, f"FAIL ({str(e)})"))
+            return False
 
     async def open_url():
         await page.goto("https://go.hanpass.com", wait_until="domcontentloaded", timeout=20000)
@@ -42,8 +44,15 @@ async def run(page):
         if not await is_logged_in_home(page):
             raise Exception("로그인 완료 후 홈 화면을 확인하지 못했습니다.")
 
-    await step("open_url", open_url)
-    await step("login_flow", login_flow)
+    if not await step("open_url", open_url):
+        result.append(("login_flow", "FAIL (URL 접속 실패로 로그인 중단)"))
+        result.append(("login_result_check", "FAIL (URL 접속 실패로 검증 중단)"))
+        return result
+
+    if not await step("login_flow", login_flow):
+        result.append(("login_result_check", "FAIL (로그인 플로우 실패로 검증 중단)"))
+        return result
+
     await step("login_result_check", login_result_check)
 
     try:

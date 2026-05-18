@@ -77,7 +77,7 @@ async def capture_snapshot(run: dict, page, label: str = "live") -> None:
         await page.screenshot(
             path=str(file_path),
             full_page=False,
-            timeout=15000,
+            timeout=7000,
             animations="disabled",
             caret="hide",
         )
@@ -99,7 +99,11 @@ async def capture_snapshot(run: dict, page, label: str = "live") -> None:
         save_run(run)
         append_run_log(run, f"📸 스냅샷 저장: {filename}")
     except Exception as exc:
-        append_run_log(run, f"📸 스냅샷 실패: {exc}")
+        message = str(exc)
+        if "Timeout" in message:
+            append_run_log(run, "📸 스냅샷 생략: 캡처 타임아웃")
+        else:
+            append_run_log(run, f"📸 스냅샷 생략: {message.splitlines()[0]}")
 
 
 async def snapshot_loop(run: dict, page, stop_event: asyncio.Event) -> None:

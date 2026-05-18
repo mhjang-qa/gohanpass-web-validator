@@ -442,10 +442,12 @@ class NotionUploader:
             suffix = " 등" if len(failed_tests) > 3 else ""
             outcome = f"실패 항목은 {sample}{suffix}입니다."
 
-        return (
-            f"이번 실행은 {scenario_count}개 시나리오, 총 {total_count}개 TC 기준으로 진행되었습니다. "
-            f"결과는 {status}이며 PASS {pass_count}건, FAIL {fail_count}건, N/A {na_count}건입니다. "
-            f"{outcome}"
+        return "\n".join(
+            [
+                f"이번 실행은 {scenario_count}개 시나리오, 총 {total_count}개 TC 기준으로 진행되었습니다.",
+                f"결과는 {status}이며 PASS {pass_count}건, FAIL {fail_count}건, N/A {na_count}건입니다.",
+                outcome,
+            ]
         )
 
     def _result_table_block(self, tests: list[dict]) -> dict:

@@ -101,6 +101,23 @@ async def enter_password_by_keypad(page: Page, password: str):
 
 
 async def open_login_form(page: Page):
+    async def login_form_visible() -> bool:
+        try:
+            email = page.get_by_placeholder("이메일")
+            return await email.count() > 0 and await email.first.is_visible()
+        except Exception:
+            return False
+
+    async def wait_for_login_form(timeout_ms: int = 2500) -> bool:
+        try:
+            await page.get_by_placeholder("이메일").first.wait_for(state="visible", timeout=timeout_ms)
+            return True
+        except Exception:
+            return await login_form_visible()
+
+    if await login_form_visible():
+        return
+
     selectors = [
         "button:has-text('로그인하기')",
         "a:has-text('로그인하기')",
@@ -119,13 +136,24 @@ async def open_login_form(page: Page):
             if await target.count() == 0:
                 continue
             await target.click(timeout=5000, force=True)
-            await asyncio.sleep(1.5)
-            return
+            if await wait_for_login_form():
+                return
         except Exception as e:
             last_error = e
 
     try:
-        clicked = await page.locator("text=로그인하기").first.evaluate(
+        login_text = page.get_by_text("로그인하기", exact=False).first
+        if await login_text.count() > 0:
+            box = await login_text.bounding_box()
+            if box:
+                await page.mouse.click(box["x"] + box["width"] + 28, box["y"] + box["height"] / 2)
+                if await wait_for_login_form():
+                    return
+    except Exception as e:
+        last_error = e
+
+    try:
+        clicked = await page.get_by_text("로그인하기", exact=False).first.evaluate(
             """node => {
                 const clickable = node.closest("button, a, [role='button'], .cursor-pointer");
                 if (clickable) {
@@ -141,13 +169,12 @@ async def open_login_form(page: Page):
                 return false;
             }"""
         )
-        if clicked:
-            await asyncio.sleep(1.5)
+        if clicked and await wait_for_login_form():
             return
     except Exception as e:
         last_error = e
 
-    if await page.get_by_placeholder("이메일").count() > 0:
+    if await login_form_visible():
         return
 
     raise RuntimeError(f"로그인 진입 버튼을 찾지 못했습니다: {last_error}")
