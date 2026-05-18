@@ -52,6 +52,17 @@ docker run -d \
 로컬 오버라이드:
 - `SCENARIO_DIR`: 시나리오 `.py` 폴더. 기본값은 이 저장소의 `scenarios/`
 
+## 시나리오
+
+- `00_web_login.py`: 웹 실행용 로그인 시나리오
+- `01_login.py`: 로컬 GUI에서 쓰던 상세 로그인 시나리오
+
+## Notion 컬럼
+
+추가 컬럼:
+- `테스트 결과`: select
+- 값: `테스트 완료`, `테스트 실패`
+
 ## Render 설정
 
 Render Web Service에서 아래처럼 설정합니다.

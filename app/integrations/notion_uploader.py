@@ -255,6 +255,36 @@ class NotionUploader:
 
         return status_name, {prop_type: {"name": self._pick_option(candidates, options)}}
 
+    def _test_result_property(self, requested_result: str) -> tuple[str, dict]:
+        result_name, result_prop = self._property(["테스트 결과", "Test Result"])
+        prop_type = result_prop.get("type") if result_prop else "select"
+        if prop_type != "select":
+            raise NotionUploadError(
+                "Notion DB의 '테스트 결과' 속성 타입을 select로 변경하세요.",
+                f"Invalid test result property type: {prop_type}",
+            )
+
+        options = self._available_option_names(result_prop, prop_type)
+        if requested_result == "테스트 완료":
+            candidates = [
+                os.getenv("NOTION_TEST_RESULT_SUCCESS"),
+                "테스트 완료",
+                "완료",
+                "성공",
+                "Success",
+                "Completed",
+            ]
+        else:
+            candidates = [
+                os.getenv("NOTION_TEST_RESULT_FAILURE"),
+                "테스트 실패",
+                "실패",
+                "Fail",
+                "Failed",
+            ]
+
+        return result_name, {prop_type: {"name": self._pick_option(candidates, options)}}
+
     def _platform_property(self, platform: str) -> tuple[str, dict]:
         platform_name, platform_prop = self._property(["플랫폼", "Platform"])
         prop_type = platform_prop.get("type")
@@ -612,6 +642,9 @@ class NotionUploader:
         na_name, na_prop = self._property(["N/ A", "N/A", "NA"])
         total_name, total_prop = self._property(["Total", "TOTAL"])
         result_name, result_prop = self._property(["결과", "Result"])
+        test_result_name, test_result_property = self._test_result_property(
+            "테스트 완료" if fail_count == 0 else "테스트 실패"
+        )
         date_name, date_prop = self._property(["등록일", "날짜", "Date"])
         platform_name, platform_property = self._platform_property(platform)
         status_name, status_property = self._status_property(status)
@@ -636,6 +669,7 @@ class NotionUploader:
                 na_name: self._number_property(na_prop, na_count),
                 total_name: self._number_property(total_prop, total_count),
                 status_name: status_property,
+                test_result_name: test_result_property,
                 result_name: self._text_property(
                     result_prop,
                     self._result_summary_text(pass_count, fail_count, na_count, total_count, status),
