@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
-WORKSPACE_DIR = BASE_DIR.parent
 
 load_dotenv(BASE_DIR / ".env")
 
@@ -22,7 +21,6 @@ def resolve_path(value: str, default: Path) -> Path:
 
 
 SCENARIO_DIR = resolve_path("SCENARIO_DIR", BASE_DIR / "scenarios")
-MOBILE_VALIDATOR_DIR = resolve_path("MOBILE_VALIDATOR_DIR", WORKSPACE_DIR / "mobile-web-validator")
 DATA_DIR = BASE_DIR / "data"
 RUNS_DIR = DATA_DIR / "runs"
 OUTPUT_DIR = BASE_DIR / "output"

@@ -1,22 +1,12 @@
-import sys
-import importlib.util
 from pathlib import Path
 
-from app.config import MOBILE_VALIDATOR_DIR, NOTION_UPLOAD
+from app.config import NOTION_UPLOAD
+from app.integrations.notion_uploader import NotionUploader
 
 
 def upload_to_notion(run: dict):
     if not NOTION_UPLOAD:
         return None
-
-    module_path = MOBILE_VALIDATOR_DIR / "app" / "integrations" / "notion_uploader.py"
-    spec = importlib.util.spec_from_file_location("mobile_notion_uploader", module_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Notion uploader 로드 실패: {module_path}")
-
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    NotionUploader = module.NotionUploader
 
     result_lines = []
     for scenario in run["scenarios"]:

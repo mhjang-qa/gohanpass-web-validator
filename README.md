@@ -36,7 +36,7 @@ docker run -d \
   go-hanpass-web-validator
 ```
 
-주의: Docker 배포 시 `SCENARIO_DIR`에 접근 가능한 위치로 시나리오 파일을 포함하거나 볼륨 마운트해야 합니다. 클라우드 VM에서는 이 프로젝트와 `mobile-web-validator`를 같은 상위 폴더에 두는 구성이 가장 단순합니다.
+주의: Docker 배포 시에는 이 저장소 안의 `scenarios/`를 그대로 사용합니다. 별도 외부 경로를 마운트할 필요가 없습니다.
 
 ## 환경변수
 
@@ -49,9 +49,8 @@ docker run -d \
 - `NOTION_UPLOAD=true`: 실행 결과를 Notion에 자동 업로드
 - `TIMEZONE=Asia/Seoul`: 스케줄 기준 시간대
 
-로컬 몽레포용 오버라이드:
-- `SCENARIO_DIR`: 시나리오 `.py` 폴더
-- `MOBILE_VALIDATOR_DIR`: 기존 GUI 프로젝트 경로. 현재 구조에서는 Notion 업로더 재사용에만 사용
+로컬 오버라이드:
+- `SCENARIO_DIR`: 시나리오 `.py` 폴더. 기본값은 이 저장소의 `scenarios/`
 
 ## Render 설정
 

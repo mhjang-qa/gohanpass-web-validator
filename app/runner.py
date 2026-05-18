@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 from playwright.async_api import async_playwright
 
-from app.config import HEADLESS, MOBILE_VALIDATOR_DIR, OUTPUT_DIR, SCENARIO_DIR, TIMEZONE
+from app.config import HEADLESS, OUTPUT_DIR, SCENARIO_DIR, TIMEZONE
 from app.notion import upload_to_notion
 from app.scenarios import resolve_scenario_paths
 from app.storage import save_run
@@ -219,8 +219,6 @@ async def create_page():
 def import_scenario(path: Path):
     if str(SCENARIO_DIR.parent) not in sys.path:
         sys.path.insert(0, str(SCENARIO_DIR.parent))
-    if str(MOBILE_VALIDATOR_DIR) not in sys.path:
-        sys.path.insert(0, str(MOBILE_VALIDATOR_DIR))
 
     module_name = f"web_scenario_{path.stem}_{uuid.uuid4().hex}"
     spec = importlib.util.spec_from_file_location(module_name, path)
