@@ -162,7 +162,7 @@ async def execute_run(run: dict, scenario_paths: list[Path], notion_upload: bool
 
         log_path = OUTPUT_DIR / f"{run['id']}.txt"
         log_path.write_text("\n".join(run["logs"]), encoding="utf-8")
-        run["attachments"].append(str(log_path))
+        run["log_path"] = str(log_path)
 
         if notion_upload:
             notion_result = upload_to_notion(run)
@@ -312,14 +312,6 @@ async def create_page():
         ),
         extra_http_headers={"Accept-Language": "ko-KR,ko;q=0.9"},
     )
-    async def block_font_routes(route):
-        url = route.request.url.lower()
-        if url.endswith((".woff", ".woff2", ".ttf", ".otf")):
-            await route.abort()
-            return
-        await route.continue_()
-
-    await context.route("**/*", block_font_routes)
     await context.grant_permissions(["geolocation"], origin="https://go.hanpass.com")
     return playwright, browser, context, await context.new_page()
 
