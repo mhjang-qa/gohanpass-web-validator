@@ -73,7 +73,13 @@ async def capture_snapshot(run: dict, page, label: str = "live") -> None:
     filename = f"{label}_{len(run['snapshots']) + 1:03d}_{timestamp}.png"
     file_path = snapshot_dir / filename
     try:
-        await page.screenshot(path=str(file_path), full_page=False)
+        await page.screenshot(
+            path=str(file_path),
+            full_page=False,
+            timeout=15000,
+            animations="disabled",
+            caret="hide",
+        )
         if not _is_meaningful_snapshot(file_path):
             if file_path.exists():
                 file_path.unlink(missing_ok=True)
@@ -145,10 +151,16 @@ async def execute_run(run: dict, scenario_paths: list[Path], notion_upload: bool
             save_run(run)
 
         screenshot_path = OUTPUT_DIR / f"{run['id']}.png"
-        await page.screenshot(path=str(screenshot_path), full_page=True)
+        await page.screenshot(
+            path=str(screenshot_path),
+            full_page=True,
+            timeout=15000,
+            animations="disabled",
+            caret="hide",
+        )
         run["attachments"].append(str(screenshot_path))
 
-        log_path = OUTPUT_DIR / f"{run['id']}.log"
+        log_path = OUTPUT_DIR / f"{run['id']}.txt"
         log_path.write_text("\n".join(run["logs"]), encoding="utf-8")
         run["attachments"].append(str(log_path))
 
@@ -300,6 +312,14 @@ async def create_page():
         ),
         extra_http_headers={"Accept-Language": "ko-KR,ko;q=0.9"},
     )
+    async def block_font_routes(route):
+        url = route.request.url.lower()
+        if url.endswith((".woff", ".woff2", ".ttf", ".otf")):
+            await route.abort()
+            return
+        await route.continue_()
+
+    await context.route("**/*", block_font_routes)
     await context.grant_permissions(["geolocation"], origin="https://go.hanpass.com")
     return playwright, browser, context, await context.new_page()
 
