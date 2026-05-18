@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GO Hanpass Web Auto Validator</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">GO Hanpass QA Automation</p>
+          <h1>웹 자동 검증 콘솔</h1>
+          <p class="copy">서버에 배포하면 PC가 꺼져 있어도 스케줄에 맞춰 시나리오를 실행하고 Notion 리포트를 남깁니다.</p>
+        </div>
+        <div class="status">
+          <span id="scheduleState">스케줄 확인중</span>
+        </div>
+      </section>
+
+      <section class="grid">
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>시나리오</h2>
+              <p>실행할 시나리오를 선택합니다.</p>
+            </div>
+            <button id="runBtn">즉시 실행</button>
+          </div>
+          <div id="scenarioList" class="scenario-list"></div>
+          <label class="check">
+            <input id="notionUpload" type="checkbox" checked />
+            <span>Notion 자동 등록</span>
+          </label>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>스케줄</h2>
+              <p>서버 기준 Asia/Seoul 시간으로 실행됩니다.</p>
+            </div>
+            <button id="saveScheduleBtn" class="secondary">저장</button>
+          </div>
+          <label class="check">
+            <input id="scheduleEnabled" type="checkbox" />
+            <span>스케줄 활성화</span>
+          </label>
+          <label class="field">
+            <span>실행 시간</span>
+            <input id="scheduleTime" type="time" value="09:00" />
+          </label>
+          <div class="days" id="days"></div>
+        </article>
+
+        <article class="panel wide">
+          <div class="panel-head">
+            <div>
+              <h2>실행 기록</h2>
+              <p>최근 실행 결과와 로그를 확인합니다.</p>
+            </div>
+            <button id="refreshBtn" class="secondary">새로고침</button>
+          </div>
+          <div id="runs" class="runs"></div>
+        </article>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
