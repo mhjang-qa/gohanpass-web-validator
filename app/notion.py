@@ -1,12 +1,24 @@
 from pathlib import Path
 import re
 
-from app.config import NOTION_UPLOAD
+from app.config import NOTION_UPLOAD, OUTPUT_DIR
 from app.integrations.notion_uploader import NotionUploader
 
 
 def _compact_status(value: str) -> str:
     return re.sub(r"\s+", " ", str(value)).strip()
+
+
+def _image_path(value: str) -> str | None:
+    path_text = str(value)
+    if path_text.startswith("/output/"):
+        path = OUTPUT_DIR / path_text.removeprefix("/output/")
+    else:
+        path = Path(path_text)
+
+    if path.exists() and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
+        return str(path)
+    return None
 
 
 def upload_to_notion(run: dict):
@@ -22,19 +34,19 @@ def upload_to_notion(run: dict):
 
     uploader = NotionUploader()
     attachments = [
-        item
+        path
         for item in run.get("attachments", [])
-        if Path(item).exists() and Path(item).suffix.lower() in {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+        if (path := _image_path(item))
     ]
-    scenario_snapshots = {
-        scenario["name"]: [
-            snapshot
+    scenario_snapshots = {}
+    for scenario in run.get("scenarios", []):
+        snapshots = [
+            path
             for snapshot in scenario.get("snapshots", [])
-            if Path(snapshot).exists() and Path(snapshot).suffix.lower() in {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+            if (path := _image_path(snapshot))
         ]
-        for scenario in run.get("scenarios", [])
-        if scenario.get("snapshots")
-    }
+        if snapshots:
+            scenario_snapshots[scenario["name"]] = snapshots
 
     return uploader.upload_result(
         title=f"GO Hanpass 웹 자동리포트_{run['started_at'].replace(':', '').replace('-', '')[:15]}",
