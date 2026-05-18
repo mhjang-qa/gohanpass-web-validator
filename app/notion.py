@@ -21,6 +21,21 @@ def upload_to_notion(run: dict):
         result_lines.append("")
 
     uploader = NotionUploader()
+    attachments = [
+        item
+        for item in run.get("attachments", [])
+        if Path(item).exists() and Path(item).suffix.lower() in {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+    ]
+    scenario_snapshots = {
+        scenario["name"]: [
+            snapshot
+            for snapshot in scenario.get("snapshots", [])
+            if Path(snapshot).exists() and Path(snapshot).suffix.lower() in {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+        ]
+        for scenario in run.get("scenarios", [])
+        if scenario.get("snapshots")
+    }
+
     return uploader.upload_result(
         title=f"GO Hanpass 웹 자동리포트_{run['started_at'].replace(':', '').replace('-', '')[:15]}",
         version="1.0.0",
@@ -29,7 +44,8 @@ def upload_to_notion(run: dict):
         fail_count=run["summary"]["fail"],
         na_count=run["summary"]["na"],
         total_count=run["summary"]["total"],
-        status="완료" if run["summary"]["fail"] == 0 else "실패",
+        status="성공" if run["summary"]["fail"] == 0 else "실패",
         result_text="\n".join(result_lines),
-        attachment_paths=[item for item in run.get("attachments", []) if Path(item).exists()],
+        scenario_snapshots=scenario_snapshots,
+        attachment_paths=attachments,
     )

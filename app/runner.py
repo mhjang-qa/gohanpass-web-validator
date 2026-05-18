@@ -87,7 +87,14 @@ async def capture_snapshot(run: dict, page, label: str = "live") -> None:
                 append_run_log(run, "📸 스냅샷 생략: 화면이 아직 준비되지 않았습니다.")
             return
 
-        run["snapshots"].append(f"/output/{run['id']}/snapshots/{filename}")
+        snapshot_ref = f"/output/{run['id']}/snapshots/{filename}"
+        run["snapshots"].append(snapshot_ref)
+        active_name = run.get("current_scenario_name")
+        if active_name:
+            for scenario in run.get("scenarios", []):
+                if scenario.get("name") == active_name:
+                    scenario.setdefault("snapshots", []).append(snapshot_ref)
+                    break
         save_run(run)
         append_run_log(run, f"📸 스냅샷 저장: {filename}")
     except Exception as exc:
@@ -127,7 +134,10 @@ async def execute_run(run: dict, scenario_paths: list[Path], notion_upload: bool
         snapshot_task = asyncio.create_task(snapshot_loop(run, page, snapshot_stop))
         for idx, path in enumerate(scenario_paths, 1):
             append_run_log(run, f"[{idx}/{len(scenario_paths)}] {path.name} 시작")
-            scenario_result = {"name": path.name, "results": []}
+            scenario_result = {"name": path.name, "results": [], "snapshots": []}
+            run["scenarios"].append(scenario_result)
+            run["current_scenario_name"] = path.name
+            save_run(run)
             try:
                 module = import_scenario(path)
                 if hasattr(module, "log"):
@@ -147,7 +157,9 @@ async def execute_run(run: dict, scenario_paths: list[Path], notion_upload: bool
                 run["summary"][kind] += 1
                 scenario_result["results"].append({"name": str(name), "status": str(status)})
 
-            run["scenarios"].append(scenario_result)
+            if not scenario_result["snapshots"]:
+                await capture_snapshot(run, page, label=f"{path.stem}_final")
+            run["current_scenario_name"] = None
             save_run(run)
 
         screenshot_path = OUTPUT_DIR / f"{run['id']}.png"
@@ -158,7 +170,6 @@ async def execute_run(run: dict, scenario_paths: list[Path], notion_upload: bool
             animations="disabled",
             caret="hide",
         )
-        run["attachments"].append(str(screenshot_path))
 
         log_path = OUTPUT_DIR / f"{run['id']}.txt"
         log_path.write_text("\n".join(run["logs"]), encoding="utf-8")

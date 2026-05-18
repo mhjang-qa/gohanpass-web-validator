@@ -46,5 +46,13 @@ async def run(page):
     await step("login_flow", login_flow)
     await step("login_result_check", login_result_check)
 
-    await page.screenshot(path=f"output/{scenario_name}_{timestamp}.png")
+    try:
+        await page.screenshot(
+            path=f"output/{scenario_name}_{timestamp}.png",
+            timeout=15000,
+            animations="disabled",
+            caret="hide",
+        )
+    except Exception:
+        pass
     return result

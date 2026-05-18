@@ -234,9 +234,10 @@ class NotionUploader:
 
         options = self._available_option_names(status_prop, prop_type)
 
-        if requested_status == "완료":
+        if requested_status in ("완료", "성공"):
             candidates = [
                 os.getenv("NOTION_STATUS_SUCCESS"),
+                "성공",
                 "완료",
                 "Done",
                 "Complete",
@@ -265,9 +266,10 @@ class NotionUploader:
             )
 
         options = self._available_option_names(result_prop, prop_type)
-        if requested_result == "테스트 완료":
+        if requested_result in ("테스트 성공", "테스트 완료"):
             candidates = [
                 os.getenv("NOTION_TEST_RESULT_SUCCESS"),
+                "테스트 성공",
                 "테스트 완료",
                 "완료",
                 "성공",
@@ -494,6 +496,7 @@ class NotionUploader:
         na_count: int,
         total_count: int,
         status: str,
+        scenario_snapshots: dict[str, list[str]] | None = None,
     ) -> list[dict]:
         scenarios = self._parse_result_text(result_text)
         children = [
@@ -553,6 +556,8 @@ class NotionUploader:
                 }
             )
             children.append(self._result_table_block(scenario["tests"]))
+            if scenario_snapshots and scenario["name"] in scenario_snapshots:
+                children.extend(self._snapshot_children(scenario_snapshots[scenario["name"]]))
 
         return children[:100]
 
@@ -615,6 +620,33 @@ class NotionUploader:
 
         return children
 
+    def _snapshot_children(self, snapshot_paths: list[str]) -> list[dict]:
+        children = [
+            {
+                "object": "block",
+                "type": "heading_4",
+                "heading_4": {
+                    "rich_text": [self._rich_text("스냅샷")]
+                },
+            }
+        ]
+
+        for snapshot_path in snapshot_paths:
+            path = Path(snapshot_path)
+            uploaded = self._upload_file(path)
+            children.append(
+                {
+                    "object": "block",
+                    "type": "image",
+                    "image": {
+                        "type": "file_upload",
+                        "file_upload": {"id": uploaded["id"]},
+                    },
+                }
+            )
+
+        return children
+
     def upload_result(
         self,
         title: str,
@@ -626,6 +658,7 @@ class NotionUploader:
         total_count: int,
         status: str,
         result_text: str,
+        scenario_snapshots: dict[str, list[str]] | None = None,
         attachment_paths: list[str] | None = None,
     ):
         title = str(title)
@@ -656,6 +689,7 @@ class NotionUploader:
             na_count,
             total_count,
             status,
+            scenario_snapshots=scenario_snapshots,
         )
 
         payload = {
