@@ -30,13 +30,21 @@ function selectedScenarios() {
   return Array.from(document.querySelectorAll("[data-scenario]:checked")).map((item) => item.value);
 }
 
-function renderScenarios() {
+function setScenarioSelection(names = []) {
+  const selected = new Set(names);
+  for (const checkbox of document.querySelectorAll("[data-scenario]")) {
+    checkbox.checked = selected.has(checkbox.value);
+  }
+}
+
+function renderScenarios(selected = []) {
   const list = document.querySelector("#scenarioList");
   list.innerHTML = "";
+  const selectedSet = new Set(selected);
   for (const scenario of state.scenarios) {
     const label = document.createElement("label");
     label.className = "scenario";
-    label.innerHTML = `<input type="checkbox" data-scenario value="${scenario.name}"><span>${scenario.name}</span>`;
+    label.innerHTML = `<input type="checkbox" data-scenario value="${scenario.name}" ${selectedSet.has(scenario.name) ? "checked" : ""}><span>${scenario.name}</span>`;
     list.appendChild(label);
   }
 }
@@ -128,6 +136,7 @@ function setPolling(enabled) {
 }
 
 async function refresh() {
+  const currentSelection = selectedScenarios();
   const [scenarioData, schedule, runData] = await Promise.all([
     api("/api/scenarios"),
     api("/api/schedule"),
@@ -135,10 +144,20 @@ async function refresh() {
   ]);
   state.scenarios = scenarioData.scenarios;
   state.schedule = schedule;
-  renderScenarios();
-  applyScheduleToForm(schedule);
-  renderRuns(runData.runs);
   const runningRun = runData.runs.find((run) => run.status === "running");
+  const runningSelection = runningRun?.requested_scenarios || [];
+  const initialSelection = currentSelection.length
+    ? currentSelection
+    : (runningSelection.length ? runningSelection : (schedule.scenarios || []));
+
+  renderScenarios(initialSelection);
+  applyScheduleToForm(schedule);
+  if (runningSelection.length) {
+    setScenarioSelection(runningSelection);
+  } else if (currentSelection.length) {
+    setScenarioSelection(currentSelection);
+  }
+  renderRuns(runData.runs);
   updateScheduleStateText(runningRun, schedule);
   setPolling(Boolean(runningRun));
 }

@@ -46,6 +46,7 @@ def create_run_record(
     run = {
         "id": run_id,
         "source": source,
+        "requested_scenarios": scenario_names,
         "status": "running",
         "started_at": now_iso(),
         "finished_at": None,

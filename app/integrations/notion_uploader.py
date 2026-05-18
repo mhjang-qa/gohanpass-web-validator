@@ -682,7 +682,7 @@ class NotionUploader:
         total_name, total_prop = self._property(["Total", "TOTAL"])
         result_name, result_prop = self._property(["결과", "Result"])
         test_result_name, test_result_property = self._test_result_property(
-            "테스트 완료" if fail_count == 0 else "테스트 실패"
+            "테스트 성공" if fail_count == 0 else "테스트 실패"
         )
         date_name, date_prop = self._property(["등록일", "날짜", "Date"])
         platform_name, platform_property = self._platform_property(platform)

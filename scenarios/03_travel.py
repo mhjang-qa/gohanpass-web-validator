@@ -374,7 +374,14 @@ async def run(page):
 
     await step("home_result_check", check_home_success)
 
-    # 스크린샷
-    await page.screenshot(path=f"output/{scenario_name}_{timestamp}.png")
+    try:
+        await page.screenshot(
+            path=f"output/{scenario_name}_{timestamp}.png",
+            timeout=15000,
+            animations="disabled",
+            caret="hide",
+        )
+    except Exception:
+        pass
 
     return result

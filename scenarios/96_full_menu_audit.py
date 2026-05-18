@@ -103,7 +103,8 @@ async def goto_home(page: Page, force_reload: bool = False):
         return
 
     if await page.get_by_placeholder("이메일").count() > 0:
-        raise RuntimeError("로그인 세션이 없습니다. 01_login.py 실행 직후 이어서 실행하세요.")
+        await ensure_logged_in(page)
+        return
 
     if await has_login_required_popup(page):
         await ensure_logged_in(page)
@@ -407,6 +408,14 @@ async def run(page: Page):
             await asyncio.sleep(0.5)
 
     Path("output").mkdir(exist_ok=True)
-    await page.screenshot(path=f"output/{scenario_name}_{timestamp}.png")
+    try:
+        await page.screenshot(
+            path=f"output/{scenario_name}_{timestamp}.png",
+            timeout=15000,
+            animations="disabled",
+            caret="hide",
+        )
+    except Exception:
+        pass
 
     return result
