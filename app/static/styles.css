@@ -245,6 +245,21 @@ pre {
   white-space: pre-wrap;
 }
 
+.snapshot-link {
+  display: block;
+  margin-top: 10px;
+}
+
+.snapshot {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  object-fit: cover;
+}
+
 @media (max-width: 860px) {
   .hero,
   .panel-head,

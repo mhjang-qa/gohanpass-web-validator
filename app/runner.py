@@ -3,6 +3,7 @@ import importlib.util
 import subprocess
 import sys
 import uuid
+from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -45,6 +46,7 @@ def create_run_record(scenario_names: list[str], source: str, run_id: str | None
         "scenarios": [],
         "summary": {"total": 0, "pass": 0, "fail": 0, "na": 0},
         "logs": [],
+        "snapshots": [],
         "attachments": [],
         "notion": None,
     }
@@ -57,13 +59,42 @@ def append_run_log(run: dict, message: str):
     save_run(run)
 
 
+async def capture_snapshot(run: dict, page, label: str = "live") -> None:
+    snapshot_dir = OUTPUT_DIR / run["id"] / "snapshots"
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(ZoneInfo(TIMEZONE)).strftime("%H%M%S")
+    filename = f"{label}_{len(run['snapshots']) + 1:03d}_{timestamp}.png"
+    file_path = snapshot_dir / filename
+    try:
+        await page.screenshot(path=str(file_path), full_page=False)
+        run["snapshots"].append(f"/output/{run['id']}/snapshots/{filename}")
+        save_run(run)
+        append_run_log(run, f"📸 스냅샷 저장: {filename}")
+    except Exception as exc:
+        append_run_log(run, f"📸 스냅샷 실패: {exc}")
+
+
+async def snapshot_loop(run: dict, page, stop_event: asyncio.Event) -> None:
+    await capture_snapshot(run, page, label="start")
+    while not stop_event.is_set():
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=10)
+        except asyncio.TimeoutError:
+            if stop_event.is_set():
+                break
+            await capture_snapshot(run, page)
+
+
 async def execute_run(run: dict, scenario_paths: list[Path], notion_upload: bool = True) -> dict:
     global CURRENT_RUN_ID
 
     CURRENT_RUN_ID = run["id"]
     playwright = browser = context = page = None
+    snapshot_stop = asyncio.Event()
+    snapshot_task: asyncio.Task | None = None
     try:
         playwright, browser, context, page = await create_page()
+        snapshot_task = asyncio.create_task(snapshot_loop(run, page, snapshot_stop))
         for idx, path in enumerate(scenario_paths, 1):
             append_run_log(run, f"[{idx}/{len(scenario_paths)}] {path.name} 시작")
             scenario_result = {"name": path.name, "results": []}
@@ -111,6 +142,11 @@ async def execute_run(run: dict, scenario_paths: list[Path], notion_upload: bool
         run["finished_at"] = now_iso()
         save_run(run)
         CURRENT_RUN_ID = None
+        snapshot_stop.set()
+        if snapshot_task:
+            snapshot_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await snapshot_task
         if browser:
             await browser.close()
         if playwright:

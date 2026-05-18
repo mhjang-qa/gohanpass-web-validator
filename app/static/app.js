@@ -79,6 +79,7 @@ function renderRuns(runs) {
     const item = document.createElement("div");
     item.className = `run ${run.status === "running" ? "live" : ""}`;
     const logs = (run.logs || []).slice(-18).join("\n");
+    const latestSnapshot = (run.snapshots || []).slice(-1)[0] || "";
     item.innerHTML = `
       <div>
         <strong>${run.id}</strong>
@@ -87,6 +88,7 @@ function renderRuns(runs) {
       <div>
         <span class="badge ${run.status}">${run.status}</span>
         <p class="copy">Total ${run.summary?.total || 0} / PASS ${run.summary?.pass || 0} / FAIL ${run.summary?.fail || 0} / N/A ${run.summary?.na || 0}</p>
+        ${latestSnapshot ? `<a class="snapshot-link" href="${latestSnapshot}" target="_blank" rel="noreferrer"><img class="snapshot" src="${latestSnapshot}" alt="latest snapshot" /></a>` : ""}
         <pre>${logs}</pre>
       </div>
       <div>${run.notion?.uploaded ? "Notion 등록" : ""}</div>

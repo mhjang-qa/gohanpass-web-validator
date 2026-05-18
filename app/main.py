@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app.config import BASE_DIR
+from app.config import BASE_DIR, OUTPUT_DIR
 import app.runner as runner
 from app.scenarios import list_scenarios
 from app.scheduler import apply_schedule, start_scheduler, stop_scheduler
@@ -16,6 +16,7 @@ from app.storage import list_runs, load_run, load_schedule
 app = FastAPI(title="GO Hanpass Web Auto Validator")
 STATIC_DIR = BASE_DIR / "app" / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+app.mount("/output", StaticFiles(directory=OUTPUT_DIR), name="output")
 
 
 class RunRequest(BaseModel):
