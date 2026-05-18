@@ -505,13 +505,13 @@ class NotionUploader:
                 "object": "block",
                 "type": "heading_2",
                 "heading_2": {
-                    "rich_text": [self._rich_text("금번 테스트 요약")]
+                    "rich_text": [self._rich_text("테스트 요약")]
                 },
             },
             {
                 "object": "block",
-                "type": "paragraph",
-                "paragraph": {
+                "type": "callout",
+                "callout": {
                     "rich_text": [
                         self._rich_text(
                             self._summary_text(
@@ -523,7 +523,12 @@ class NotionUploader:
                                 scenarios,
                             )
                         )
-                    ]
+                    ],
+                    "icon": {
+                        "type": "emoji",
+                        "emoji": "📌",
+                    },
+                    "color": "gray_background",
                 },
             },
             {
