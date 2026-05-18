@@ -4,11 +4,12 @@ from app.config import SCENARIO_DIR
 
 
 def list_scenarios() -> list[dict]:
+    excluded = {"sample_scenario.py", "01_login.py"}
     scenarios = []
     for path in sorted(SCENARIO_DIR.glob("*.py")):
         if path.name.startswith("_") or path.name == "__init__.py":
             continue
-        if path.name == "sample_scenario.py":
+        if path.name in excluded:
             continue
         scenarios.append(
             {
