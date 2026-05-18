@@ -33,6 +33,10 @@
             <input id="notionUpload" type="checkbox" checked />
             <span>Notion 자동 등록</span>
           </label>
+          <label class="field">
+            <span>스냅샷 간격(초)</span>
+            <input id="snapshotInterval" type="number" min="10" step="10" value="30" />
+          </label>
         </article>
 
         <article class="panel">
@@ -46,6 +50,10 @@
           <label class="check">
             <input id="scheduleEnabled" type="checkbox" />
             <span>스케줄 활성화</span>
+          </label>
+          <label class="field">
+            <span>스냅샷 간격(초)</span>
+            <input id="scheduleSnapshotInterval" type="number" min="10" step="10" value="30" />
           </label>
           <label class="field">
             <span>실행 시간</span>

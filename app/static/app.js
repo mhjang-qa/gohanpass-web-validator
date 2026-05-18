@@ -56,6 +56,8 @@ function applyScheduleToForm(schedule) {
   document.querySelector("#scheduleEnabled").checked = schedule.enabled;
   document.querySelector("#scheduleTime").value = schedule.time || "09:00";
   document.querySelector("#notionUpload").checked = schedule.notion_upload !== false;
+  document.querySelector("#snapshotInterval").value = schedule.snapshot_interval_seconds || 30;
+  document.querySelector("#scheduleSnapshotInterval").value = schedule.snapshot_interval_seconds || 30;
   renderDays(schedule.days || []);
 
   for (const checkbox of document.querySelectorAll("[data-scenario]")) {
@@ -151,6 +153,7 @@ async function runNow() {
       body: JSON.stringify({
         scenarios: selectedScenarios(),
         notion_upload: document.querySelector("#notionUpload").checked,
+        snapshot_interval_seconds: Number(document.querySelector("#snapshotInterval").value || 30),
       }),
     });
     if (run?.id) {
@@ -172,6 +175,7 @@ async function saveSchedule() {
     days,
     scenarios: selectedScenarios(),
     notion_upload: document.querySelector("#notionUpload").checked,
+    snapshot_interval_seconds: Number(document.querySelector("#scheduleSnapshotInterval").value || 30),
   };
   await api("/api/schedule", { method: "POST", body: JSON.stringify(schedule) });
   await refresh();

@@ -31,6 +31,7 @@ def load_schedule() -> dict:
             "days": ["mon", "tue", "wed", "thu", "fri"],
             "scenarios": [],
             "notion_upload": True,
+            "snapshot_interval_seconds": 30,
         },
     )
 

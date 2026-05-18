@@ -4,3 +4,4 @@ apscheduler
 playwright
 python-dotenv
 requests
+pillow

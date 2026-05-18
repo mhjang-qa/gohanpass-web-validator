@@ -9,6 +9,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from playwright.async_api import async_playwright
+from PIL import Image, ImageStat
 
 from app.config import HEADLESS, OUTPUT_DIR, SCENARIO_DIR, TIMEZONE
 from app.notion import upload_to_notion
@@ -34,7 +35,12 @@ def classify_status(status: str) -> str:
     return "fail"
 
 
-def create_run_record(scenario_names: list[str], source: str, run_id: str | None = None) -> tuple[dict, list[Path]]:
+def create_run_record(
+    scenario_names: list[str],
+    source: str,
+    run_id: str | None = None,
+    snapshot_interval_seconds: int = 30,
+) -> tuple[dict, list[Path]]:
     run_id = run_id or datetime.now(ZoneInfo(TIMEZONE)).strftime("%Y%m%d_%H%M%S")
     scenario_paths = resolve_scenario_paths(scenario_names)
     run = {
@@ -49,6 +55,7 @@ def create_run_record(scenario_names: list[str], source: str, run_id: str | None
         "snapshots": [],
         "attachments": [],
         "notion": None,
+        "snapshot_interval_seconds": max(10, int(snapshot_interval_seconds or 30)),
     }
     save_run(run)
     return run, scenario_paths
@@ -67,6 +74,13 @@ async def capture_snapshot(run: dict, page, label: str = "live") -> None:
     file_path = snapshot_dir / filename
     try:
         await page.screenshot(path=str(file_path), full_page=False)
+        if not _is_meaningful_snapshot(file_path):
+            if file_path.exists():
+                file_path.unlink(missing_ok=True)
+            if not run["snapshots"]:
+                append_run_log(run, "📸 스냅샷 생략: 화면이 아직 준비되지 않았습니다.")
+            return
+
         run["snapshots"].append(f"/output/{run['id']}/snapshots/{filename}")
         save_run(run)
         append_run_log(run, f"📸 스냅샷 저장: {filename}")
@@ -75,14 +89,24 @@ async def capture_snapshot(run: dict, page, label: str = "live") -> None:
 
 
 async def snapshot_loop(run: dict, page, stop_event: asyncio.Event) -> None:
-    await capture_snapshot(run, page, label="start")
+    interval = max(10, int(run.get("snapshot_interval_seconds", 30) or 30))
     while not stop_event.is_set():
         try:
-            await asyncio.wait_for(stop_event.wait(), timeout=10)
+            await asyncio.wait_for(stop_event.wait(), timeout=interval)
         except asyncio.TimeoutError:
             if stop_event.is_set():
                 break
             await capture_snapshot(run, page)
+
+
+def _is_meaningful_snapshot(path: Path) -> bool:
+    try:
+        with Image.open(path) as image:
+            sample = image.convert("L").resize((64, 64))
+            stat = ImageStat.Stat(sample)
+            return stat.stddev[0] >= 8.0
+    except Exception:
+        return True
 
 
 async def execute_run(run: dict, scenario_paths: list[Path], notion_upload: bool = True) -> dict:
@@ -153,21 +177,49 @@ async def execute_run(run: dict, scenario_paths: list[Path], notion_upload: bool
             await playwright.stop()
 
 
-async def run_scenarios(scenario_names: list[str], notion_upload: bool = True, source: str = "manual", run_id: str | None = None) -> dict:
+async def run_scenarios(
+    scenario_names: list[str],
+    notion_upload: bool = True,
+    source: str = "manual",
+    run_id: str | None = None,
+    snapshot_interval_seconds: int = 30,
+) -> dict:
     if RUN_LOCK.locked() or any(not task.done() for task in RUN_TASKS.values()):
         raise RuntimeError("이미 실행 중인 작업이 있습니다.")
 
     async with RUN_LOCK:
-        run, scenario_paths = create_run_record(scenario_names, source, run_id=run_id)
+        run, scenario_paths = create_run_record(
+            scenario_names,
+            source,
+            run_id=run_id,
+            snapshot_interval_seconds=snapshot_interval_seconds,
+        )
         return await execute_run(run, scenario_paths, notion_upload=notion_upload)
 
 
-def start_run_scenarios(scenario_names: list[str], notion_upload: bool = True, source: str = "manual", run_id: str | None = None) -> dict:
+def start_run_scenarios(
+    scenario_names: list[str],
+    notion_upload: bool = True,
+    source: str = "manual",
+    run_id: str | None = None,
+    snapshot_interval_seconds: int = 30,
+) -> dict:
     if RUN_LOCK.locked() or any(not task.done() for task in RUN_TASKS.values()):
         raise RuntimeError("이미 실행 중인 작업이 있습니다.")
 
-    run, scenario_paths = create_run_record(scenario_names, source, run_id=run_id)
-    task = asyncio.create_task(run_scenarios_background(run, scenario_paths, notion_upload=notion_upload))
+    run, scenario_paths = create_run_record(
+        scenario_names,
+        source,
+        run_id=run_id,
+        snapshot_interval_seconds=snapshot_interval_seconds,
+    )
+    task = asyncio.create_task(
+        run_scenarios_background(
+            run,
+            scenario_paths,
+            notion_upload=notion_upload,
+        )
+    )
     RUN_TASKS[run["id"]] = task
     task.add_done_callback(lambda _: RUN_TASKS.pop(run["id"], None))
     return run

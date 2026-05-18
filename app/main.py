@@ -22,6 +22,7 @@ app.mount("/output", StaticFiles(directory=OUTPUT_DIR), name="output")
 class RunRequest(BaseModel):
     scenarios: list[str]
     notion_upload: bool = True
+    snapshot_interval_seconds: int = 30
 
 
 class ScheduleRequest(BaseModel):
@@ -30,6 +31,7 @@ class ScheduleRequest(BaseModel):
     days: list[str]
     scenarios: list[str]
     notion_upload: bool = True
+    snapshot_interval_seconds: int = 30
 
 
 @app.get("/api/current-run")
@@ -78,7 +80,12 @@ async def api_start_run(request: RunRequest):
     if not request.scenarios:
         raise HTTPException(status_code=400, detail="scenarios required")
     try:
-        run = runner.start_run_scenarios(request.scenarios, notion_upload=request.notion_upload, source="manual")
+        run = runner.start_run_scenarios(
+            request.scenarios,
+            notion_upload=request.notion_upload,
+            source="manual",
+            snapshot_interval_seconds=request.snapshot_interval_seconds,
+        )
         return run
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

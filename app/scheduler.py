@@ -26,7 +26,12 @@ async def scheduled_run():
     scenarios = schedule.get("scenarios", [])
     if not schedule.get("enabled") or not scenarios:
         return
-    await run_scenarios(scenarios, notion_upload=schedule.get("notion_upload", True), source="schedule")
+    await run_scenarios(
+        scenarios,
+        notion_upload=schedule.get("notion_upload", True),
+        source="schedule",
+        snapshot_interval_seconds=schedule.get("snapshot_interval_seconds", 30),
+    )
 
 
 def apply_schedule(schedule: dict):
