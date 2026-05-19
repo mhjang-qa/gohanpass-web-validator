@@ -6,6 +6,7 @@ from playwright.async_api import Page
 LOGIN_EMAIL = "hanpassqa5@gmail.com"
 LOGIN_PASSWORD = "xptmxm123!"
 BASE_URL = "https://go.hanpass.com"
+WEB_SIGNIN_API = "https://app.hanpass.com/app/v1/member/web-signin"
 
 
 async def log(message: str):
@@ -277,7 +278,18 @@ async def perform_login(page: Page):
     for confirm_btn in confirm_candidates:
         try:
             await confirm_btn.wait_for(state="visible", timeout=5000)
-            await confirm_btn.click(timeout=5000)
+            async with page.expect_response(
+                lambda response: WEB_SIGNIN_API in response.url,
+                timeout=15000,
+            ) as response_info:
+                await confirm_btn.click(timeout=5000)
+            response = await response_info.value
+            try:
+                setattr(page, "gohanpass_web_signin_status", response.status)
+                setattr(page, "gohanpass_web_signin_json", await response.json())
+            except Exception:
+                setattr(page, "gohanpass_web_signin_status", response.status)
+                setattr(page, "gohanpass_web_signin_json", None)
             await asyncio.sleep(4)
             return
         except Exception as e:

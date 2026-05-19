@@ -44,15 +44,34 @@ async def run(page):
         if not await is_logged_in_home(page):
             raise Exception("로그인 완료 후 홈 화면을 확인하지 못했습니다.")
 
+    async def web_signin_response_check():
+        data = getattr(page, "gohanpass_web_signin_json", None)
+        status = getattr(page, "gohanpass_web_signin_status", None)
+        if not isinstance(data, dict):
+            raise Exception(f"web-signin 응답 JSON 없음(status={status})")
+
+        if data.get("resultCode") != "0":
+            raise Exception(f"resultCode={data.get('resultCode')}")
+        if data.get("resultMessage") != "SUCCESS":
+            raise Exception(f"resultMessage={data.get('resultMessage')}")
+
+        payload = data.get("data") if isinstance(data.get("data"), dict) else data
+        if not payload.get("session"):
+            raise Exception("session 값 없음")
+        if not payload.get("memberSeq"):
+            raise Exception("memberSeq 값 없음")
+
     if not await step("open_url", open_url):
         result.append(("login_flow", "FAIL (URL 접속 실패로 로그인 중단)"))
         result.append(("login_result_check", "FAIL (URL 접속 실패로 검증 중단)"))
         return result
 
     if not await step("login_flow", login_flow):
+        result.append(("web_signin_response_check", "FAIL (로그인 플로우 실패로 검증 중단)"))
         result.append(("login_result_check", "FAIL (로그인 플로우 실패로 검증 중단)"))
         return result
 
+    await step("web_signin_response_check", web_signin_response_check)
     await step("login_result_check", login_result_check)
 
     try:
