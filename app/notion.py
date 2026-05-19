@@ -3,6 +3,7 @@ import re
 
 from app.config import NOTION_UPLOAD, OUTPUT_DIR
 from app.integrations.notion_uploader import NotionUploader
+from PIL import Image
 
 
 def _compact_status(value: str) -> str:
@@ -17,8 +18,28 @@ def _image_path(value: str) -> str | None:
         path = Path(path_text)
 
     if path.exists() and path.suffix.lower() in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
-        return str(path)
+        return str(_resized_image_path(path))
     return None
+
+
+def _resized_image_path(path: Path) -> Path:
+    resized_dir = OUTPUT_DIR / "notion_resized"
+    resized_dir.mkdir(parents=True, exist_ok=True)
+    resized_path = resized_dir / f"{path.stem}_50{path.suffix.lower()}"
+
+    if resized_path.exists() and resized_path.stat().st_mtime >= path.stat().st_mtime:
+        return resized_path
+
+    try:
+        with Image.open(path) as image:
+            width, height = image.size
+            resized = image.resize((max(1, width // 2), max(1, height // 2)), Image.Resampling.LANCZOS)
+            if resized.mode in ("RGBA", "P") and path.suffix.lower() in {".jpg", ".jpeg"}:
+                resized = resized.convert("RGB")
+            resized.save(resized_path)
+            return resized_path
+    except Exception:
+        return path
 
 
 def upload_to_notion(run: dict):

@@ -17,6 +17,12 @@ async def log(message: str):
         pass
 
 
+async def capture_checkpoint(page: Page, label: str):
+    snapshot = getattr(page, "gohanpass_capture_snapshot", None)
+    if snapshot:
+        await snapshot(label)
+
+
 async def has_login_required_popup(page: Page) -> bool:
     popup = page.get_by_text("로그인 후 이용해주세요.", exact=False)
     try:
@@ -194,17 +200,22 @@ async def perform_login(page: Page):
 
     await close_login_required_popup(page)
     await open_login_form(page)
+    await log("🔐 로그인 페이지 진입 확인")
 
     email_input = page.locator("input[placeholder='이메일']")
     await email_input.wait_for(state="visible", timeout=8000)
     await email_input.fill("")
     await email_input.type(LOGIN_EMAIL, delay=60)
     await asyncio.sleep(0.8)
+    await log("🔐 로그인 이메일 입력 완료")
+    await capture_checkpoint(page, "login_email_entered")
 
     await page.get_by_placeholder("비밀번호").click()
     await asyncio.sleep(0.8)
     await enter_password_by_keypad(page, LOGIN_PASSWORD)
     await asyncio.sleep(0.8)
+    await log("🔐 로그인 비밀번호 입력 완료")
+    await capture_checkpoint(page, "login_password_entered")
 
     confirm_btn = page.locator("button.bg-primary.text-white.w-full:has-text('확인')")
     await confirm_btn.wait_for(state="visible", timeout=5000)

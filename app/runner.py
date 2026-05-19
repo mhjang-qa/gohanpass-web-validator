@@ -106,6 +106,13 @@ async def capture_snapshot(run: dict, page, label: str = "live") -> None:
             append_run_log(run, f"📸 스냅샷 생략: {message.splitlines()[0]}")
 
 
+def bind_scenario_snapshot(run: dict, page):
+    async def scenario_snapshot(label: str):
+        await capture_snapshot(run, page, label=label)
+
+    setattr(page, "gohanpass_capture_snapshot", scenario_snapshot)
+
+
 async def snapshot_loop(run: dict, page, stop_event: asyncio.Event) -> None:
     interval = max(10, int(run.get("snapshot_interval_seconds", 30) or 30))
     while not stop_event.is_set():
@@ -136,6 +143,7 @@ async def execute_run(run: dict, scenario_paths: list[Path], notion_upload: bool
     snapshot_task: asyncio.Task | None = None
     try:
         playwright, browser, context, page = await create_page()
+        bind_scenario_snapshot(run, page)
         snapshot_task = asyncio.create_task(snapshot_loop(run, page, snapshot_stop))
         for idx, path in enumerate(scenario_paths, 1):
             append_run_log(run, f"[{idx}/{len(scenario_paths)}] {path.name} 시작")
