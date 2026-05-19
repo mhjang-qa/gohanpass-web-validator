@@ -70,7 +70,17 @@ async def is_logged_in_home(page: Page) -> bool:
 async def click_keypad_char(page: Page, ch: str):
     selector = f"button[nfiltercode='{ch}']"
     await page.wait_for_selector(selector, timeout=5000)
-    await page.locator(selector).first.click()
+    locator = page.locator(selector)
+    count = await locator.count()
+    for idx in range(count):
+        target = locator.nth(idx)
+        try:
+            if await target.is_visible():
+                await target.click(timeout=3000)
+                return
+        except Exception:
+            pass
+    await locator.first.click(timeout=3000, force=True)
 
 
 async def click_keypad_command(page: Page, command: str):
@@ -81,12 +91,24 @@ async def click_keypad_command(page: Page, command: str):
         "special": "#nfilter_lower2special, #nfilter_upper2special",
         "char": "#nfilter_change_char",
         "clear": "#nfilter_clear",
+        "enter": "#nfilter_enter",
+        "close": "#nfilter_close",
     }
 
     if command not in command_map:
         raise RuntimeError(f"지원하지 않는 command: {command}")
 
-    await page.locator(command_map[command]).first.click()
+    locator = page.locator(command_map[command])
+    count = await locator.count()
+    for idx in range(count):
+        target = locator.nth(idx)
+        try:
+            if await target.is_visible():
+                await target.click(timeout=3000)
+                return
+        except Exception:
+            pass
+    await locator.first.click(timeout=3000, force=True)
 
 
 async def enter_password_by_keypad(page: Page, password: str):
@@ -104,6 +126,16 @@ async def enter_password_by_keypad(page: Page, password: str):
             raise RuntimeError(f"지원하지 않는 문자: {ch}")
 
         await asyncio.sleep(0.2)
+
+    try:
+        await click_keypad_command(page, "enter")
+        await asyncio.sleep(0.5)
+    except Exception:
+        try:
+            await click_keypad_command(page, "close")
+            await asyncio.sleep(0.5)
+        except Exception:
+            pass
 
 
 async def open_login_form(page: Page):
@@ -125,14 +157,15 @@ async def open_login_form(page: Page):
         return
 
     selectors = [
+        "h2:has-text('로그인하기') ~ button",
+        "div:has(> h2:has-text('로그인하기')) button",
+        "div:has(h2:has-text('로그인하기')) button:has(img[src*='ico16-btn-arrow-right'])",
+        "button:has(img[src*='ico16-btn-arrow-right-grayscale-05.svg'])",
+        "button:has(img[src*='ico16-btn-arrow-right'])",
         "button:has-text('로그인하기')",
         "a:has-text('로그인하기')",
         "[role='button']:has-text('로그인하기')",
         ".cursor-pointer:has-text('로그인하기')",
-        "text=로그인하기",
-        "button:has(img[src*='ico16-btn-arrow-right-grayscale-05.svg'])",
-        "button:has-text('로그인')",
-        "text=로그인",
     ]
 
     last_error = None
@@ -148,13 +181,19 @@ async def open_login_form(page: Page):
             last_error = e
 
     try:
-        login_text = page.get_by_text("로그인하기", exact=False).first
-        if await login_text.count() > 0:
-            box = await login_text.bounding_box()
-            if box:
-                await page.mouse.click(box["x"] + box["width"] + 28, box["y"] + box["height"] / 2)
-                if await wait_for_login_form():
-                    return
+        clicked = await page.locator("h2", has_text="로그인하기").first.evaluate(
+            """node => {
+                const row = node.closest("div");
+                const button = row ? row.querySelector("button") : null;
+                if (button) {
+                    button.click();
+                    return true;
+                }
+                return false;
+            }"""
+        )
+        if clicked and await wait_for_login_form():
+            return
     except Exception as e:
         last_error = e
 
@@ -177,6 +216,17 @@ async def open_login_form(page: Page):
         )
         if clicked and await wait_for_login_form():
             return
+    except Exception as e:
+        last_error = e
+
+    try:
+        login_text = page.get_by_text("로그인하기", exact=False).first
+        if await login_text.count() > 0:
+            box = await login_text.bounding_box()
+            if box:
+                await page.mouse.click(box["x"] + box["width"] + 42, box["y"] + box["height"] / 2)
+                if await wait_for_login_form():
+                    return
     except Exception as e:
         last_error = e
 
@@ -217,10 +267,23 @@ async def perform_login(page: Page):
     await log("🔐 로그인 비밀번호 입력 완료")
     await capture_checkpoint(page, "login_password_entered")
 
-    confirm_btn = page.locator("button.bg-primary.text-white.w-full:has-text('확인')")
-    await confirm_btn.wait_for(state="visible", timeout=5000)
-    await confirm_btn.click()
-    await asyncio.sleep(4)
+    confirm_candidates = [
+        page.get_by_role("button", name="로그인", exact=True),
+        page.locator("button.bg-primary.text-white.w-full:has-text('로그인')"),
+        page.locator("section button:has-text('로그인')").first,
+        page.locator("button.bg-primary.text-white.w-full:has-text('확인')"),
+    ]
+    last_error = None
+    for confirm_btn in confirm_candidates:
+        try:
+            await confirm_btn.wait_for(state="visible", timeout=5000)
+            await confirm_btn.click(timeout=5000)
+            await asyncio.sleep(4)
+            return
+        except Exception as e:
+            last_error = e
+
+    raise RuntimeError(f"로그인 버튼 클릭 실패: {last_error}")
 
 
 async def verify_authenticated(page: Page):
