@@ -50,7 +50,15 @@ def upload_to_notion(run: dict):
     for scenario in run["scenarios"]:
         result_lines.append(f"[{scenario['name']}]")
         for item in scenario["results"]:
-            result_lines.append(f"- {item['name']}: {_compact_status(item['status'])}")
+            detail = _compact_status(item["status"])
+            if item.get("type") == "api" or scenario.get("type") == "api":
+                detail = (
+                    f"{item.get('method', '-')} {item.get('endpoint', '-')} "
+                    f"status={item.get('status_code', '-')} result={detail}"
+                )
+                if item.get("reason"):
+                    detail = f"{detail} reason={item['reason']}"
+            result_lines.append(f"- {item['name']}: {detail}")
         result_lines.append("")
 
     uploader = NotionUploader()
@@ -76,9 +84,11 @@ def upload_to_notion(run: dict):
         pass_count=run["summary"]["pass"],
         fail_count=run["summary"]["fail"],
         na_count=run["summary"]["na"],
+        error_count=run["summary"].get("error", 0),
         total_count=run["summary"]["total"],
-        status="성공" if run["summary"]["fail"] == 0 else "실패",
+        status="성공" if run["summary"]["fail"] == 0 and run["summary"].get("error", 0) == 0 else "실패",
         result_text="\n".join(result_lines),
+        scenario_results=run.get("scenarios", []),
         scenario_snapshots=scenario_snapshots,
         attachment_paths=attachments,
     )

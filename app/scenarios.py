@@ -3,6 +3,14 @@ from pathlib import Path
 from app.config import SCENARIO_DIR
 
 
+def scenario_type(path: Path) -> str:
+    if path.name.startswith(tuple(f"{num:02d}_api_" for num in range(10, 90))):
+        return "api"
+    if "_api_" in path.name:
+        return "api"
+    return "web"
+
+
 def list_scenarios() -> list[dict]:
     excluded = {"sample_scenario.py", "01_login.py"}
     scenarios = []
@@ -16,6 +24,7 @@ def list_scenarios() -> list[dict]:
                 "name": path.name,
                 "stem": path.stem,
                 "path": str(path),
+                "type": scenario_type(path),
             }
         )
     return scenarios

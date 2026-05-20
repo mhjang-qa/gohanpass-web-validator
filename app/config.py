@@ -27,6 +27,10 @@ OUTPUT_DIR = BASE_DIR / "output"
 HEADLESS = os.getenv("HEADLESS", "true").lower() != "false"
 NOTION_UPLOAD = os.getenv("NOTION_UPLOAD", "true").lower() != "false"
 TIMEZONE = os.getenv("TIMEZONE", "Asia/Seoul")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://go.hanpass.com").rstrip("/")
+API_TIMEOUT_SECONDS = float(os.getenv("API_TIMEOUT_SECONDS", "15"))
+API_TOKEN = os.getenv("API_TOKEN", "")
+API_HEADERS = os.getenv("API_HEADERS", "")
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 RUNS_DIR.mkdir(parents=True, exist_ok=True)

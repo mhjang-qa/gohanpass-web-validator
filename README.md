@@ -10,7 +10,8 @@
 - Asia/Seoul 기준 요일/시간 스케줄 실행
 - 실행 중 실시간 로그 자동 갱신
 - 실행 중 스냅샷 자동 저장 및 웹 화면 표시
-- 시나리오별 PASS/FAIL/N/A 집계
+- 시나리오별 PASS/FAIL/N/A/ERROR 집계
+- 웹 UI 시나리오와 API 검증 시나리오 통합 실행
 - Notion DB 자동 업로드
 - Notion 상세 페이지에 테스트 요약, 테스트 상세 표, 시나리오별 스냅샷 첨부
 - Render/Docker 배포 지원
@@ -52,9 +53,22 @@ TIMEZONE=Asia/Seoul
 
 ```env
 SCENARIO_DIR=scenarios
+API_BASE_URL=https://go.hanpass.com
+API_TIMEOUT_SECONDS=15
+API_TOKEN=
+API_HEADERS={}
 ```
 
 `SCENARIO_DIR`를 지정하지 않으면 저장소 내부 `scenarios/` 폴더를 사용합니다.
+
+API 검증 환경변수:
+
+- `API_BASE_URL`: API 검증 요청의 기준 URL입니다.
+- `API_TIMEOUT_SECONDS`: API 요청 타임아웃입니다.
+- `API_TOKEN`: Bearer 토큰이 필요한 API 검증 시 사용합니다.
+- `API_HEADERS`: 추가 헤더를 JSON object 문자열로 지정합니다. 예: `{"X-Client":"qa"}`
+
+민감정보는 `.env`에만 설정하고 시나리오 파일에는 하드코딩하지 않습니다.
 
 ## 시나리오
 
@@ -70,6 +84,35 @@ SCENARIO_DIR=scenarios
 - `99_auto_click_main.py`: 메인 화면 클릭 후보 검증
 
 웹 실행 시 모든 주요 시나리오는 공통 로그인 헬퍼를 사용합니다. 로그인 세션이 없거나 `로그인 후 이용해주세요.` 팝업이 발생하면 자동 로그인 후 이어서 진행합니다.
+
+API 검증 시나리오:
+
+- `10_api_health_check.py`: 기준 URL health/root 응답 검증
+- `11_api_home_check.py`: home endpoint 응답 검증
+- `12_api_travel_check.py`: travel endpoint 응답 검증
+
+API 시나리오는 파일명과 시나리오 메타데이터 기준으로 `api` 타입으로 노출됩니다. `/api/scenarios` 응답에는 웹/API 타입이 함께 포함되며, 웹 콘솔에서도 API 시나리오를 선택해 즉시 실행 또는 스케줄 실행할 수 있습니다.
+
+`01_login.py`는 기존 호환 wrapper 용도로 보존되며 신규 실행 목록에서는 기존 정책대로 제외됩니다.
+
+## 판정 기준
+
+웹 UI 시나리오:
+
+- 기존 시나리오가 반환하는 `PASS`, `FAIL (...)`, `N/A (...)` 결과를 그대로 집계합니다.
+- 시나리오 실행 중 예외가 발생하면 `FAIL`로 집계합니다.
+
+API 검증 시나리오:
+
+- HTTP `200`: `PASS`
+- HTTP `400`: `FAIL`
+- HTTP `401`, `403`: `ERROR`
+- HTTP `404`: `FAIL`
+- HTTP `500` 이상: `ERROR`
+- 그 외 `4xx`: `FAIL`
+- 그 외 예상하지 못한 status code 또는 요청 예외/타임아웃: `ERROR`
+
+각 API 검증 결과에는 `endpoint`, `method`, `status_code`, `result`, `reason`이 저장됩니다. API 검증은 화면 스냅샷이 없을 수 있으므로 스냅샷 첨부는 선택 사항입니다.
 
 ## 웹 콘솔 동작
 
@@ -109,6 +152,8 @@ Notion DB 필수/권장 컬럼:
 - `테스트 상세`: 시나리오별 표
 - 표 컬럼: 테스트 항목, 테스트 설명, 결과
 - 시나리오별 스냅샷: 각 시나리오 결과 아래 image 블록으로 첨부
+
+API 검증 결과도 같은 실행 리포트에 포함됩니다. API 시나리오의 상세 표에는 테스트 항목, Method, Endpoint, Status Code, 결과, 실패 사유가 표시됩니다. Notion DB의 기존 `PASS`, `FAIL`, `N/A`, `Total` 컬럼 형식은 유지하며, `ERROR`는 상세 페이지 요약과 결과 텍스트에 함께 표시됩니다.
 
 ## Render 배포
 
@@ -172,3 +217,4 @@ Docker 배포 시에도 저장소 내부 `scenarios/`를 그대로 사용합니�
 - 외부 공개 시 인증이 없습니다. Render에 공개 배포할 경우 Basic Auth, VPN, 사내망, reverse proxy 인증 중 하나를 붙이는 구성이 필요합니다.
 - Notion 업로드 실패는 실행 자체를 failed로 표시합니다.
 - 스냅샷 캡처 실패는 테스트 실패로 집계하지 않고 로그에만 짧게 남깁니다.
+- API 전용 실행은 Playwright 브라우저를 띄우지 않습니다. 웹 시나리오가 포함된 실행에서만 브라우저와 스냅샷 루프를 시작합니다.

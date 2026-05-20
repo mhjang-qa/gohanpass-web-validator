@@ -13,7 +13,7 @@ from PIL import Image, ImageStat
 
 from app.config import HEADLESS, OUTPUT_DIR, SCENARIO_DIR, TIMEZONE
 from app.notion import upload_to_notion
-from app.scenarios import resolve_scenario_paths
+from app.scenarios import resolve_scenario_paths, scenario_type
 from app.storage import save_run
 
 
@@ -30,9 +30,24 @@ def classify_status(status: str) -> str:
     upper = str(status).upper()
     if upper.startswith("PASS"):
         return "pass"
+    if upper.startswith("ERROR"):
+        return "error"
     if upper.startswith(("NA", "N/A")):
         return "na"
     return "fail"
+
+
+def normalize_result(raw_result) -> dict:
+    if isinstance(raw_result, dict):
+        item = {key: value for key, value in raw_result.items()}
+        item.setdefault("name", item.get("endpoint", "api_check"))
+        item.setdefault("status", item.get("result", "ERROR"))
+        return item
+
+    if isinstance(raw_result, (list, tuple)) and len(raw_result) >= 2:
+        return {"name": str(raw_result[0]), "status": str(raw_result[1])}
+
+    return {"name": "scenario_result", "status": f"ERROR (invalid result: {raw_result})"}
 
 
 def create_run_record(
@@ -51,7 +66,7 @@ def create_run_record(
         "started_at": now_iso(),
         "finished_at": None,
         "scenarios": [],
-        "summary": {"total": 0, "pass": 0, "fail": 0, "na": 0},
+        "summary": {"total": 0, "pass": 0, "fail": 0, "na": 0, "error": 0},
         "logs": [],
         "snapshots": [],
         "attachments": [],
@@ -142,12 +157,10 @@ async def execute_run(run: dict, scenario_paths: list[Path], notion_upload: bool
     snapshot_stop = asyncio.Event()
     snapshot_task: asyncio.Task | None = None
     try:
-        playwright, browser, context, page = await create_page()
-        bind_scenario_snapshot(run, page)
-        snapshot_task = asyncio.create_task(snapshot_loop(run, page, snapshot_stop))
         for idx, path in enumerate(scenario_paths, 1):
             append_run_log(run, f"[{idx}/{len(scenario_paths)}] {path.name} 시작")
-            scenario_result = {"name": path.name, "results": [], "snapshots": []}
+            current_type = scenario_type(path)
+            scenario_result = {"name": path.name, "type": current_type, "results": [], "snapshots": []}
             run["scenarios"].append(scenario_result)
             run["current_scenario_name"] = path.name
             save_run(run)
@@ -159,30 +172,42 @@ async def execute_run(run: dict, scenario_paths: list[Path], notion_upload: bool
                 if auth_module and hasattr(auth_module, "log"):
                     auth_module.log.logger = lambda message: append_run_log(run, message)
 
-                raw_results = await module.run(page)
+                module_type = getattr(module, "SCENARIO_TYPE", current_type)
+                scenario_result["type"] = module_type
+                if module_type == "api":
+                    raw_results = await module.run()
+                else:
+                    if page is None:
+                        playwright, browser, context, page = await create_page()
+                        bind_scenario_snapshot(run, page)
+                        snapshot_task = asyncio.create_task(snapshot_loop(run, page, snapshot_stop))
+                    raw_results = await module.run(page)
             except Exception as exc:
                 raw_results = [("scenario_execution", f"FAIL ({exc})")]
                 append_run_log(run, f"{path.name} 실패: {exc}")
 
-            for name, status in raw_results:
+            for raw_result in raw_results:
+                item = normalize_result(raw_result)
+                status = str(item.get("status", "ERROR"))
                 kind = classify_status(status)
                 run["summary"]["total"] += 1
                 run["summary"][kind] += 1
-                scenario_result["results"].append({"name": str(name), "status": str(status)})
+                scenario_result["results"].append(item)
 
-            if not scenario_result["snapshots"]:
+            if page is not None and scenario_result["type"] != "api" and not scenario_result["snapshots"]:
                 await capture_snapshot(run, page, label=f"{path.stem}_final")
             run["current_scenario_name"] = None
             save_run(run)
 
-        screenshot_path = OUTPUT_DIR / f"{run['id']}.png"
-        await page.screenshot(
-            path=str(screenshot_path),
-            full_page=True,
-            timeout=15000,
-            animations="disabled",
-            caret="hide",
-        )
+        if page is not None:
+            screenshot_path = OUTPUT_DIR / f"{run['id']}.png"
+            await page.screenshot(
+                path=str(screenshot_path),
+                full_page=True,
+                timeout=15000,
+                animations="disabled",
+                caret="hide",
+            )
 
         log_path = OUTPUT_DIR / f"{run['id']}.txt"
         log_path.write_text("\n".join(run["logs"]), encoding="utf-8")
@@ -192,7 +217,7 @@ async def execute_run(run: dict, scenario_paths: list[Path], notion_upload: bool
             notion_result = upload_to_notion(run)
             run["notion"] = {"uploaded": True, "page_id": notion_result.get("id") if notion_result else None}
 
-        run["status"] = "completed" if run["summary"]["fail"] == 0 else "failed"
+        run["status"] = "completed" if run["summary"]["fail"] == 0 and run["summary"].get("error", 0) == 0 else "failed"
         return run
     except Exception as exc:
         run["status"] = "failed"

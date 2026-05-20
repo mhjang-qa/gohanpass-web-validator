@@ -415,6 +415,8 @@ class NotionUploader:
             return {"color": "green", "bold": True}
         if upper.startswith("FAIL"):
             return {"color": "red", "bold": True}
+        if upper.startswith("ERROR"):
+            return {"color": "red", "bold": True}
         if upper.startswith(("NA", "N/A")):
             return {"color": "gray", "bold": True}
         return {}
@@ -424,6 +426,7 @@ class NotionUploader:
         pass_count: int,
         fail_count: int,
         na_count: int,
+        error_count: int,
         total_count: int,
         status: str,
         scenarios: list[dict],
@@ -433,25 +436,28 @@ class NotionUploader:
             f"{scenario['name']} / {test['name']}"
             for scenario in scenarios
             for test in scenario["tests"]
-            if test["status"].upper().startswith("FAIL")
+            if str(test.get("status", "")).upper().startswith(("FAIL", "ERROR"))
         ]
 
-        if fail_count == 0:
+        if fail_count == 0 and error_count == 0:
             outcome = "전체 테스트가 실패 없이 완료되었습니다."
         else:
             sample = ", ".join(failed_tests[:3])
             suffix = " 등" if len(failed_tests) > 3 else ""
-            outcome = f"실패 항목은 {sample}{suffix}입니다."
+            outcome = f"실패/오류 항목은 {sample}{suffix}입니다." if sample else "실패/오류 항목을 상세 표에서 확인하세요."
 
         return "\n".join(
             [
                 f"이번 실행은 {scenario_count}개 시나리오, 총 {total_count}개 TC 기준으로 진행되었습니다.",
-                f"결과는 {status}이며 PASS {pass_count}건, FAIL {fail_count}건, N/A {na_count}건입니다.",
+                f"결과는 {status}이며 PASS {pass_count}건, FAIL {fail_count}건, N/A {na_count}건, ERROR {error_count}건입니다.",
                 outcome,
             ]
         )
 
-    def _result_table_block(self, tests: list[dict]) -> dict:
+    def _result_table_block(self, tests: list[dict], is_api: bool = False) -> dict:
+        if is_api:
+            return self._api_result_table_block(tests)
+
         rows = [
             {
                 "object": "block",
@@ -492,17 +498,81 @@ class NotionUploader:
             },
         }
 
+    def _api_result_table_block(self, tests: list[dict]) -> dict:
+        headers = ["테스트 항목", "Method", "Endpoint", "Status Code", "결과", "실패 사유"]
+        rows = [
+            {
+                "object": "block",
+                "type": "table_row",
+                "table_row": {
+                    "cells": [[self._rich_text(header, {"bold": True})] for header in headers]
+                },
+            }
+        ]
+
+        for test in tests:
+            status = str(test.get("status") or test.get("result") or "-")
+            rows.append(
+                {
+                    "object": "block",
+                    "type": "table_row",
+                    "table_row": {
+                        "cells": [
+                            [self._rich_text(str(test.get("name", "-")))],
+                            [self._rich_text(str(test.get("method", "-")))],
+                            [self._rich_text(str(test.get("endpoint", "-")))],
+                            [self._rich_text(str(test.get("status_code", "-")))],
+                            [self._rich_text(status, self._status_annotations(status))],
+                            [self._rich_text(str(test.get("reason", "")))],
+                        ]
+                    },
+                }
+            )
+
+        return {
+            "object": "block",
+            "type": "table",
+            "table": {
+                "table_width": len(headers),
+                "has_column_header": True,
+                "has_row_header": False,
+                "children": rows,
+            },
+        }
+
+    def _scenarios_from_results(self, scenario_results: list[dict]) -> list[dict]:
+        scenarios = []
+        for scenario in scenario_results:
+            tests = []
+            for item in scenario.get("results", []):
+                tests.append(
+                    {
+                        **item,
+                        "description": self._test_case_description(str(item.get("name", ""))),
+                    }
+                )
+            scenarios.append(
+                {
+                    "name": scenario.get("name", "테스트 결과"),
+                    "type": scenario.get("type", "web"),
+                    "tests": tests,
+                }
+            )
+        return scenarios
+
     def _page_children(
         self,
         result_text: str,
         pass_count: int,
         fail_count: int,
         na_count: int,
+        error_count: int,
         total_count: int,
         status: str,
+        scenario_results: list[dict] | None = None,
         scenario_snapshots: dict[str, list[str]] | None = None,
     ) -> list[dict]:
-        scenarios = self._parse_result_text(result_text)
+        scenarios = self._scenarios_from_results(scenario_results) if scenario_results else self._parse_result_text(result_text)
         children = [
             {
                 "object": "block",
@@ -521,6 +591,7 @@ class NotionUploader:
                                 pass_count,
                                 fail_count,
                                 na_count,
+                                error_count,
                                 total_count,
                                 status,
                                 scenarios,
@@ -547,7 +618,7 @@ class NotionUploader:
                 "paragraph": {
                     "rich_text": [
                         self._rich_text(
-                            f"상태: {status} | PASS {pass_count} / FAIL {fail_count} / N/A {na_count} / Total {total_count}"
+                            f"상태: {status} | PASS {pass_count} / FAIL {fail_count} / N/A {na_count} / ERROR {error_count} / Total {total_count}"
                         )
                     ]
                 },
@@ -564,7 +635,7 @@ class NotionUploader:
                     },
                 }
             )
-            children.append(self._result_table_block(scenario["tests"]))
+            children.append(self._result_table_block(scenario["tests"], is_api=scenario.get("type") == "api"))
             if scenario_snapshots and scenario["name"] in scenario_snapshots:
                 children.extend(self._snapshot_children(scenario_snapshots[scenario["name"]]))
 
@@ -575,10 +646,11 @@ class NotionUploader:
         pass_count: int,
         fail_count: int,
         na_count: int,
+        error_count: int,
         total_count: int,
         status: str,
     ) -> str:
-        return f"{status} | PASS {pass_count} / FAIL {fail_count} / N/A {na_count} / Total {total_count}"
+        return f"{status} | PASS {pass_count} / FAIL {fail_count} / N/A {na_count} / ERROR {error_count} / Total {total_count}"
 
     def _attachment_children(self, attachment_paths: list[str] | None) -> list[dict]:
         if not attachment_paths:
@@ -667,6 +739,8 @@ class NotionUploader:
         total_count: int,
         status: str,
         result_text: str,
+        error_count: int = 0,
+        scenario_results: list[dict] | None = None,
         scenario_snapshots: dict[str, list[str]] | None = None,
         attachment_paths: list[str] | None = None,
     ):
@@ -696,8 +770,10 @@ class NotionUploader:
             pass_count,
             fail_count,
             na_count,
+            error_count,
             total_count,
             status,
+            scenario_results=scenario_results,
             scenario_snapshots=scenario_snapshots,
         )
 
@@ -715,7 +791,7 @@ class NotionUploader:
                 test_result_name: test_result_property,
                 result_name: self._text_property(
                     result_prop,
-                    self._result_summary_text(pass_count, fail_count, na_count, total_count, status),
+                    self._result_summary_text(pass_count, fail_count, na_count, error_count, total_count, status),
                 ),
                 date_name: self._date_property(date_prop, today),
             },

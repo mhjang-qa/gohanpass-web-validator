@@ -14,6 +14,37 @@ const state = {
   refreshTimer: null,
 };
 
+const AUTH_KEY = "gohanpass_web_validator_auth";
+const INTRO_DURATION_MS = 2600;
+
+function isAuthenticated() {
+  return window.localStorage.getItem(AUTH_KEY) === "qa";
+}
+
+function setScreen(screen) {
+  document.body.dataset.screen = screen;
+  document.querySelector("#introScreen").hidden = screen !== "intro";
+  document.querySelector("#loginScreen").hidden = screen !== "login";
+  document.querySelector("#appShell").hidden = screen !== "app";
+}
+
+function showLoginAfterIntro() {
+  setScreen("intro");
+  window.setTimeout(() => {
+    if (!isAuthenticated()) {
+      setScreen("login");
+      document.querySelector("#loginId").focus();
+    }
+  }, INTRO_DURATION_MS);
+}
+
+function showApp() {
+  setScreen("app");
+  refresh().catch((error) => {
+    document.querySelector("#runs").innerHTML = `<pre>${error.message}</pre>`;
+  });
+}
+
 async function api(path, options = {}) {
   const response = await fetch(path, {
     headers: { "Content-Type": "application/json" },
@@ -44,7 +75,7 @@ function renderScenarios(selected = []) {
   for (const scenario of state.scenarios) {
     const label = document.createElement("label");
     label.className = "scenario";
-    label.innerHTML = `<input type="checkbox" data-scenario value="${scenario.name}" ${selectedSet.has(scenario.name) ? "checked" : ""}><span>${scenario.name}</span>`;
+    label.innerHTML = `<input type="checkbox" data-scenario value="${scenario.name}" ${selectedSet.has(scenario.name) ? "checked" : ""}><span>${scenario.name}</span><small>${scenario.type || "web"}</small>`;
     list.appendChild(label);
   }
 }
@@ -97,7 +128,7 @@ function renderRuns(runs) {
       </div>
       <div>
         <span class="badge ${run.status}">${run.status}</span>
-        <p class="copy">Total ${run.summary?.total || 0} / PASS ${run.summary?.pass || 0} / FAIL ${run.summary?.fail || 0} / N/A ${run.summary?.na || 0}</p>
+        <p class="copy">Total ${run.summary?.total || 0} / PASS ${run.summary?.pass || 0} / FAIL ${run.summary?.fail || 0} / N/A ${run.summary?.na || 0} / ERROR ${run.summary?.error || 0}</p>
         ${latestSnapshot ? `<a class="snapshot-link" href="${latestSnapshot}" target="_blank" rel="noreferrer"><img class="snapshot" src="${latestSnapshot}" alt="latest snapshot" /></a>` : ""}
         <pre>${logs}</pre>
       </div>
@@ -136,6 +167,10 @@ function setPolling(enabled) {
 }
 
 async function refresh() {
+  if (!isAuthenticated()) {
+    return;
+  }
+
   const currentSelection = selectedScenarios();
   const [scenarioData, schedule, runData] = await Promise.all([
     api("/api/scenarios"),
@@ -200,10 +235,38 @@ async function saveSchedule() {
   await refresh();
 }
 
+function handleLogin(event) {
+  event.preventDefault();
+  const id = document.querySelector("#loginId").value.trim();
+  const password = document.querySelector("#loginPassword").value;
+  const error = document.querySelector("#loginError");
+
+  if (id === "qa" && password === "qa") {
+    window.localStorage.setItem(AUTH_KEY, "qa");
+    error.hidden = true;
+    document.querySelector("#loginForm").reset();
+    showApp();
+    return;
+  }
+
+  error.hidden = false;
+  document.querySelector("#loginPassword").select();
+}
+
+function logout() {
+  window.localStorage.removeItem(AUTH_KEY);
+  setPolling(false);
+  showLoginAfterIntro();
+}
+
+document.querySelector("#loginForm").addEventListener("submit", handleLogin);
+document.querySelector("#logoutBtn").addEventListener("click", logout);
 document.querySelector("#runBtn").addEventListener("click", runNow);
 document.querySelector("#saveScheduleBtn").addEventListener("click", saveSchedule);
 document.querySelector("#refreshBtn").addEventListener("click", refresh);
 
-refresh().catch((error) => {
-  document.querySelector("#runs").innerHTML = `<pre>${error.message}</pre>`;
-});
+if (isAuthenticated()) {
+  showApp();
+} else {
+  showLoginAfterIntro();
+}

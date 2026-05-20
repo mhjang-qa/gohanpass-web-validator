@@ -7,15 +7,47 @@
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
-    <main class="shell">
+    <section id="introScreen" class="intro-screen" aria-label="QA intro">
+      <div id="container" class="intro-container">
+        <netflixintro letter="QA" aria-hidden="true">
+          <span class="intro-letter intro-q">Q</span>
+          <span class="intro-letter intro-a">A</span>
+        </netflixintro>
+      </div>
+    </section>
+
+    <main id="loginScreen" class="login-screen" aria-label="로그인" hidden>
+      <section class="login-card">
+        <div class="login-brand">QA</div>
+        <p class="login-kicker">GO Hanpass Automation Console</p>
+        <h1>QA 자동화 대시보드</h1>
+        <form id="loginForm" class="login-form">
+          <label>
+            <span>ID</span>
+            <input id="loginId" name="id" type="text" autocomplete="username" required />
+          </label>
+          <label>
+            <span>Password</span>
+            <input id="loginPassword" name="password" type="password" autocomplete="current-password" required />
+          </label>
+          <p id="loginError" class="login-error" role="alert" hidden>ID 또는 Password가 올바르지 않습니다.</p>
+          <button type="submit" class="login-button">로그인</button>
+        </form>
+      </section>
+    </main>
+
+    <main id="appShell" class="shell app-shell" hidden>
       <section class="hero">
         <div>
           <p class="eyebrow">GO Hanpass QA Automation</p>
           <h1>웹 자동 검증 콘솔</h1>
           <p class="copy">웹 시나리오 자동 검증 및 QA 리포트 통합 플랫폼</p>
         </div>
-        <div class="status">
-          <span id="scheduleState">스케줄 확인중</span>
+        <div class="hero-actions">
+          <div class="status">
+            <span id="scheduleState">스케줄 확인중</span>
+          </div>
+          <button id="logoutBtn" class="secondary danger">로그아웃</button>
         </div>
       </section>
 
