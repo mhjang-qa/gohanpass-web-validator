@@ -15,7 +15,6 @@ const state = {
 };
 
 const AUTH_KEY = "gohanpass_web_validator_auth";
-const INTRO_DURATION_MS = 2600;
 
 function isAuthenticated() {
   return window.localStorage.getItem(AUTH_KEY) === "qa";
@@ -23,19 +22,13 @@ function isAuthenticated() {
 
 function setScreen(screen) {
   document.body.dataset.screen = screen;
-  document.querySelector("#introScreen").hidden = screen !== "intro";
   document.querySelector("#loginScreen").hidden = screen !== "login";
   document.querySelector("#appShell").hidden = screen !== "app";
 }
 
 function showLoginAfterIntro() {
-  setScreen("intro");
-  window.setTimeout(() => {
-    if (!isAuthenticated()) {
-      setScreen("login");
-      document.querySelector("#loginId").focus();
-    }
-  }, INTRO_DURATION_MS);
+  setScreen("login");
+  document.querySelector("#loginId").focus();
 }
 
 function showApp() {
