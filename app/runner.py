@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 from playwright.async_api import async_playwright
 from PIL import Image, ImageStat
 
-from app.config import HEADLESS, OUTPUT_DIR, SCENARIO_DIR, TIMEZONE
+from app.config import DATA_DIR, HEADLESS, OUTPUT_DIR, SCENARIO_DIR, TIMEZONE
 from app.notion import upload_to_notion
 from app.scenarios import resolve_scenario_paths, scenario_type
 from app.storage import save_run
@@ -72,6 +72,12 @@ def create_run_record(
         "attachments": [],
         "notion": None,
         "snapshot_interval_seconds": max(10, int(snapshot_interval_seconds or 30)),
+        "progress": {
+            "percent": 0,
+            "label": "실행 대기 중",
+            "current": 0,
+            "total": len(scenario_paths),
+        },
     }
     save_run(run)
     return run, scenario_paths
@@ -79,6 +85,16 @@ def create_run_record(
 
 def append_run_log(run: dict, message: str):
     run["logs"].append(message)
+    save_run(run)
+
+
+def update_run_progress(run: dict, percent: int, label: str, current: int | None = None) -> None:
+    progress = run.setdefault("progress", {})
+    progress["percent"] = max(0, min(100, int(percent)))
+    progress["label"] = label
+    progress["total"] = len(run.get("requested_scenarios", []))
+    if current is not None:
+        progress["current"] = current
     save_run(run)
 
 
@@ -92,7 +108,7 @@ async def capture_snapshot(run: dict, page, label: str = "live") -> None:
         await page.screenshot(
             path=str(file_path),
             full_page=False,
-            timeout=7000,
+            timeout=2500,
             animations="disabled",
             caret="hide",
         )
@@ -157,7 +173,12 @@ async def execute_run(run: dict, scenario_paths: list[Path], notion_upload: bool
     snapshot_stop = asyncio.Event()
     snapshot_task: asyncio.Task | None = None
     try:
+        scenario_count = max(1, len(scenario_paths))
+        update_run_progress(run, 5, "실행 환경 준비 중", 0)
+        append_run_log(run, "⏳ 실행 환경 준비 중")
         for idx, path in enumerate(scenario_paths, 1):
+            scenario_start_percent = 10 + int(((idx - 1) / scenario_count) * 70)
+            update_run_progress(run, scenario_start_percent, f"{path.name} 실행 준비 중", idx)
             append_run_log(run, f"[{idx}/{len(scenario_paths)}] {path.name} 시작")
             current_type = scenario_type(path)
             scenario_result = {"name": path.name, "type": current_type, "results": [], "snapshots": []}
@@ -175,12 +196,17 @@ async def execute_run(run: dict, scenario_paths: list[Path], notion_upload: bool
                 module_type = getattr(module, "SCENARIO_TYPE", current_type)
                 scenario_result["type"] = module_type
                 if module_type == "api":
+                    update_run_progress(run, scenario_start_percent + 8, f"{path.name} API 검증 실행 중", idx)
                     raw_results = await module.run()
                 else:
                     if page is None:
+                        update_run_progress(run, scenario_start_percent + 5, "브라우저 실행 및 모바일 컨텍스트 준비 중", idx)
+                        append_run_log(run, "🌐 브라우저 실행 및 모바일 컨텍스트 준비 중")
                         playwright, browser, context, page = await create_page()
                         bind_scenario_snapshot(run, page)
                         snapshot_task = asyncio.create_task(snapshot_loop(run, page, snapshot_stop))
+                        append_run_log(run, "🌐 브라우저 준비 완료")
+                    update_run_progress(run, scenario_start_percent + 12, f"{path.name} 시나리오 단계 실행 중", idx)
                     raw_results = await module.run(page)
             except Exception as exc:
                 raw_results = [("scenario_execution", f"FAIL ({exc})")]
@@ -195,32 +221,47 @@ async def execute_run(run: dict, scenario_paths: list[Path], notion_upload: bool
                 scenario_result["results"].append(item)
 
             if page is not None and scenario_result["type"] != "api" and not scenario_result["snapshots"]:
+                update_run_progress(run, scenario_start_percent + 60, f"{path.name} 최종 화면 캡처 중", idx)
                 await capture_snapshot(run, page, label=f"{path.stem}_final")
             run["current_scenario_name"] = None
+            scenario_done_percent = 10 + int((idx / scenario_count) * 70)
+            update_run_progress(run, scenario_done_percent, f"{path.name} 결과 정리 완료", idx)
+            append_run_log(run, f"[{idx}/{len(scenario_paths)}] {path.name} 완료")
             save_run(run)
 
         if page is not None:
+            update_run_progress(run, 84, "최종 스크린샷 저장 중", len(scenario_paths))
+            append_run_log(run, "📸 최종 스크린샷 저장 중")
             screenshot_path = OUTPUT_DIR / f"{run['id']}.png"
-            await page.screenshot(
-                path=str(screenshot_path),
-                full_page=True,
-                timeout=15000,
-                animations="disabled",
-                caret="hide",
-            )
+            try:
+                await page.screenshot(
+                    path=str(screenshot_path),
+                    full_page=False,
+                    timeout=5000,
+                    animations="disabled",
+                    caret="hide",
+                )
+            except Exception as exc:
+                append_run_log(run, f"📸 최종 스크린샷 생략: {str(exc).splitlines()[0]}")
 
+        update_run_progress(run, 88, "실행 로그 파일 저장 중", len(scenario_paths))
         log_path = OUTPUT_DIR / f"{run['id']}.txt"
         log_path.write_text("\n".join(run["logs"]), encoding="utf-8")
         run["log_path"] = str(log_path)
 
         if notion_upload:
+            update_run_progress(run, 92, "Notion 리포트 등록 중", len(scenario_paths))
+            append_run_log(run, "📝 Notion 리포트 등록 중")
             notion_result = upload_to_notion(run)
             run["notion"] = {"uploaded": True, "page_id": notion_result.get("id") if notion_result else None}
+            append_run_log(run, "📝 Notion 리포트 등록 완료")
 
         run["status"] = "completed" if run["summary"]["fail"] == 0 and run["summary"].get("error", 0) == 0 else "failed"
+        update_run_progress(run, 100, "실행 완료", len(scenario_paths))
         return run
     except Exception as exc:
         run["status"] = "failed"
+        update_run_progress(run, 100, "실행 오류 발생", len(scenario_paths))
         append_run_log(run, f"실행 오류: {exc}")
         return run
     finally:
@@ -344,25 +385,32 @@ async def create_page():
                 "Playwright 브라우저 자동 복구에 실패했습니다. Render 빌드 명령과 네트워크 상태를 확인하세요."
             ) from install_exc
 
-    context = await browser.new_context(
-        viewport={"width": 500, "height": 812},
-        screen={"width": 500, "height": 812},
-        is_mobile=True,
-        has_touch=True,
-        device_scale_factor=1,
-        permissions=["geolocation"],
-        geolocation={"latitude": 37.5665, "longitude": 126.9780},
-        locale="ko-KR",
-        timezone_id="Asia/Seoul",
-        user_agent=(
+    auth_state_path = DATA_DIR / "web_auth_state.json"
+    context_options = {
+        "viewport": {"width": 500, "height": 812},
+        "screen": {"width": 500, "height": 812},
+        "is_mobile": True,
+        "has_touch": True,
+        "device_scale_factor": 1,
+        "permissions": ["geolocation"],
+        "geolocation": {"latitude": 37.5665, "longitude": 126.9780},
+        "locale": "ko-KR",
+        "timezone_id": "Asia/Seoul",
+        "user_agent": (
             "Mozilla/5.0 (Linux; Android 12; Pixel 5) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/123.0.0.0 Mobile Safari/537.36"
         ),
-        extra_http_headers={"Accept-Language": "ko-KR,ko;q=0.9"},
-    )
+        "extra_http_headers": {"Accept-Language": "ko-KR,ko;q=0.9"},
+    }
+    if auth_state_path.exists():
+        context_options["storage_state"] = str(auth_state_path)
+
+    context = await browser.new_context(**context_options)
     await context.grant_permissions(["geolocation"], origin="https://go.hanpass.com")
-    return playwright, browser, context, await context.new_page()
+    page = await context.new_page()
+    setattr(page, "gohanpass_auth_state_path", str(auth_state_path))
+    return playwright, browser, context, page
 
 
 def import_scenario(path: Path):

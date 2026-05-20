@@ -5,8 +5,8 @@
   --panel: rgba(255, 255, 255, 0.92);
   --accent: #0f766e;
   --accent-dark: #115e59;
-  --netflix-red: #e50914;
-  --netflix-red-dark: #9f0008;
+  --login-green: #0f766e;
+  --login-green-dark: #115e59;
   --warn: #b45309;
   --fail: #b91c1c;
   --ok: #15803d;
@@ -28,7 +28,7 @@ body {
 
 body[data-screen="login"] {
   overflow: hidden;
-  background: #000;
+  background: #eef4f1;
 }
 
 [hidden] {
@@ -68,7 +68,7 @@ button:disabled {
 
 .login-screen {
   min-height: 100vh;
-  color: #fff;
+  color: var(--ink);
 }
 
 .login-screen {
@@ -84,37 +84,37 @@ button:disabled {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(90deg, rgba(0, 0, 0, 0.94), rgba(0, 0, 0, 0.66), rgba(0, 0, 0, 0.94)),
-    radial-gradient(circle at 20% 18%, rgba(229, 9, 20, 0.22), transparent 26%),
-    radial-gradient(circle at 82% 70%, rgba(229, 9, 20, 0.16), transparent 28%);
+    radial-gradient(circle at 12% 18%, rgba(15, 118, 110, 0.18), transparent 28%),
+    radial-gradient(circle at 82% 70%, rgba(34, 197, 94, 0.13), transparent 30%),
+    linear-gradient(135deg, #f4f7fb 0%, #eef4f1 56%, #f8fafc 100%);
 }
 
 .login-card {
   position: relative;
   width: min(430px, 100%);
   padding: 42px 38px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(8, 8, 8, 0.82);
+  background: rgba(255, 255, 255, 0.9);
   box-shadow:
-    0 28px 90px rgba(0, 0, 0, 0.72),
-    0 0 80px rgba(229, 9, 20, 0.14);
+    0 28px 90px rgba(23, 32, 51, 0.14),
+    0 0 80px rgba(15, 118, 110, 0.12);
   backdrop-filter: blur(10px);
 }
 
 .login-brand {
   margin-bottom: 22px;
-  color: var(--netflix-red);
+  color: var(--login-green);
   font-family: Impact, "Arial Black", ui-sans-serif, sans-serif;
   font-size: 68px;
   font-weight: 900;
   line-height: 0.9;
   letter-spacing: 0;
-  text-shadow: 0 0 26px rgba(229, 9, 20, 0.64);
+  text-shadow: 0 8px 24px rgba(15, 118, 110, 0.18);
 }
 
 .login-kicker {
-  color: #a3a3a3;
+  color: var(--accent-dark);
   font-size: 12px;
   font-weight: 800;
   text-transform: uppercase;
@@ -122,7 +122,7 @@ button:disabled {
 
 .login-card h1 {
   margin-top: 8px;
-  color: #fff;
+  color: var(--ink);
   font-size: 28px;
 }
 
@@ -135,7 +135,7 @@ button:disabled {
 .login-form label {
   display: grid;
   gap: 8px;
-  color: #d4d4d4;
+  color: var(--ink);
   font-size: 13px;
   font-weight: 800;
 }
@@ -144,16 +144,16 @@ button:disabled {
   width: 100%;
   min-height: 54px;
   padding: 0 16px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid var(--line);
   border-radius: 4px;
-  background: rgba(32, 32, 32, 0.92);
-  color: #fff;
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--ink);
   outline: none;
 }
 
 .login-form input:focus {
-  border-color: rgba(229, 9, 20, 0.8);
-  box-shadow: 0 0 0 3px rgba(229, 9, 20, 0.22);
+  border-color: rgba(15, 118, 110, 0.76);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.16);
 }
 
 .login-button {
@@ -161,16 +161,16 @@ button:disabled {
   min-height: 50px;
   margin-top: 8px;
   border-radius: 4px;
-  background: linear-gradient(180deg, #f6121d, var(--netflix-red-dark));
-  box-shadow: 0 14px 32px rgba(229, 9, 20, 0.34);
+  background: linear-gradient(180deg, var(--login-green), var(--login-green-dark));
+  box-shadow: 0 14px 32px rgba(15, 118, 110, 0.24);
 }
 
 .login-error {
   margin: 0;
   padding: 10px 12px;
   border-radius: 4px;
-  background: rgba(229, 9, 20, 0.14);
-  color: #ffb4b8;
+  background: #fef2f2;
+  color: var(--fail);
   font-weight: 800;
 }
 
@@ -341,7 +341,7 @@ h2 {
 
 .run {
   display: grid;
-  grid-template-columns: 180px 1fr auto;
+  grid-template-columns: 180px 1fr;
   gap: 14px;
   align-items: start;
   padding: 14px;
@@ -353,6 +353,68 @@ h2 {
 .run.live {
   border-color: #f59e0b;
   box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.28);
+}
+
+.run-progress {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  background: #fffbeb;
+}
+
+.progress-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #78350f;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.progress-meta span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.progress-meta strong {
+  flex: 0 0 auto;
+}
+
+.progress-track {
+  position: relative;
+  overflow: hidden;
+  height: 10px;
+  margin-top: 10px;
+  border-radius: 999px;
+  background: #fef3c7;
+}
+
+.progress-fill {
+  height: 100%;
+  min-width: 8px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0f766e, #22c55e);
+  transition: width 0.35s ease;
+}
+
+.run.live .progress-fill::after {
+  content: "";
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.42), transparent);
+  animation: progress-shine 1.35s linear infinite;
+}
+
+@keyframes progress-shine {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
 }
 
 .badge {
@@ -418,6 +480,15 @@ pre {
 
   .grid {
     grid-template-columns: 1fr;
+  }
+
+  .progress-meta {
+    display: block;
+  }
+
+  .progress-meta strong {
+    display: block;
+    margin-top: 4px;
   }
 
   button {

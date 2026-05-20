@@ -61,6 +61,40 @@ function setScenarioSelection(names = []) {
   }
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function progressHtml(run) {
+  if (run.status !== "running") {
+    return "";
+  }
+
+  const progress = run.progress || {};
+  const percent = Math.max(0, Math.min(100, Number(progress.percent || 0)));
+  const current = Number(progress.current || 0);
+  const total = Number(progress.total || run.requested_scenarios?.length || 0);
+  const label = progress.label || "실행 중";
+  const countText = total ? `${current}/${total}` : "진행 중";
+
+  return `
+    <div class="run-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}">
+      <div class="progress-meta">
+        <span>${escapeHtml(label)}</span>
+        <strong>${countText} · ${percent}%</strong>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" style="width: ${percent}%"></div>
+      </div>
+    </div>
+  `;
+}
+
 function renderScenarios(selected = []) {
   const list = document.querySelector("#scenarioList");
   list.innerHTML = "";
@@ -112,20 +146,20 @@ function renderRuns(runs) {
   for (const run of runs) {
     const item = document.createElement("div");
     item.className = `run ${run.status === "running" ? "live" : ""}`;
-    const logs = (run.logs || []).slice(-18).join("\n");
+    const logs = escapeHtml((run.logs || []).slice(-18).join("\n"));
     const latestSnapshot = (run.snapshots || []).slice(-1)[0] || "";
     item.innerHTML = `
       <div>
-        <strong>${run.id}</strong>
-        <p class="copy">${run.started_at || ""}</p>
+        <strong>${escapeHtml(run.id)}</strong>
+        <p class="copy">${escapeHtml(run.started_at || "")}</p>
       </div>
       <div>
-        <span class="badge ${run.status}">${run.status}</span>
+        <span class="badge ${run.status}">${escapeHtml(run.status)}</span>
         <p class="copy">Total ${run.summary?.total || 0} / PASS ${run.summary?.pass || 0} / FAIL ${run.summary?.fail || 0} / N/A ${run.summary?.na || 0} / ERROR ${run.summary?.error || 0}</p>
+        ${progressHtml(run)}
         ${latestSnapshot ? `<a class="snapshot-link" href="${latestSnapshot}" target="_blank" rel="noreferrer"><img class="snapshot" src="${latestSnapshot}" alt="latest snapshot" /></a>` : ""}
         <pre>${logs}</pre>
       </div>
-      <div>${run.notion?.uploaded ? "Notion 등록" : ""}</div>
     `;
     target.appendChild(item);
   }

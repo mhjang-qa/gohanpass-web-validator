@@ -1,29 +1,42 @@
 import asyncio
-from datetime import datetime
-from pathlib import Path
+from time import perf_counter
 
-from scenarios._auth import ensure_logged_in, has_login_required_popup, is_logged_in_home
-
-
-scenario_name = Path(__file__).stem
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+from scenarios._auth import ensure_logged_in, has_login_required_popup, is_logged_in_home, log
 
 
 async def run(page):
     result = []
 
     async def step(name, func):
+        started = perf_counter()
         try:
+            await log(f"▶ {name} 진행 중")
             await func()
             result.append((name, "PASS"))
+            await log(f"✅ {name} 완료 ({perf_counter() - started:.1f}s)")
             return True
         except Exception as e:
             result.append((name, f"FAIL ({str(e)})"))
+            await log(f"❌ {name} 실패 ({perf_counter() - started:.1f}s): {str(e)}")
             return False
 
     async def open_url():
-        await page.goto("https://go.hanpass.com", wait_until="domcontentloaded", timeout=20000)
-        await asyncio.sleep(2)
+        await log("🌐 GO Hanpass 홈 접속 중")
+        if not page.url.startswith("https://go.hanpass.com"):
+            await page.goto("https://go.hanpass.com", wait_until="commit", timeout=10000)
+        settled_until = perf_counter() + 5
+        while perf_counter() < settled_until:
+            if await is_logged_in_home(page):
+                return
+            try:
+                login_text = page.get_by_text("로그인하기", exact=False).first
+                if await login_text.count() > 0 and await login_text.is_visible():
+                    return
+            except Exception:
+                pass
+            if await page.get_by_placeholder("이메일").count() > 0:
+                return
+            await asyncio.sleep(0.2)
 
     async def login_flow():
         await ensure_logged_in(page)
@@ -48,6 +61,9 @@ async def run(page):
         data = getattr(page, "gohanpass_web_signin_json", None)
         status = getattr(page, "gohanpass_web_signin_status", None)
         if not isinstance(data, dict):
+            if await is_logged_in_home(page):
+                await log("🔐 기존 로그인 세션 사용 - web-signin 응답 검증 생략")
+                return
             raise Exception(f"web-signin 응답 JSON 없음(status={status})")
 
         if data.get("resultCode") != "0":
@@ -74,13 +90,4 @@ async def run(page):
     await step("web_signin_response_check", web_signin_response_check)
     await step("login_result_check", login_result_check)
 
-    try:
-        await page.screenshot(
-            path=f"output/{scenario_name}_{timestamp}.png",
-            timeout=15000,
-            animations="disabled",
-            caret="hide",
-        )
-    except Exception:
-        pass
     return result

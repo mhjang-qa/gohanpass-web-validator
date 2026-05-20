@@ -24,6 +24,56 @@ async def capture_checkpoint(page: Page, label: str):
         await snapshot(label)
 
 
+async def short_pause(seconds: float = 0.2):
+    await asyncio.sleep(seconds)
+
+
+async def save_auth_state(page: Page):
+    path = getattr(page, "gohanpass_auth_state_path", None)
+    if not path:
+        return
+    try:
+        await page.context.storage_state(path=path)
+        await log("🔐 로그인 세션 저장 완료")
+    except Exception:
+        pass
+
+
+async def apply_web_signin_state(page: Page, response_data: dict):
+    payload = response_data.get("data") if isinstance(response_data.get("data"), dict) else response_data
+    session = payload.get("session")
+    member_seq = payload.get("memberSeq")
+    if not session or not member_seq:
+        return
+
+    await page.evaluate(
+        """({ payload }) => {
+            const root = JSON.parse(localStorage.getItem("persist:root") || "{}");
+            const previousAuth = root.auth ? JSON.parse(root.auth) : {};
+            root.auth = JSON.stringify({
+                ...previousAuth,
+                memberSeq: payload.memberSeq,
+                session: payload.session,
+                token: payload.token || payload.accessToken || previousAuth.token || null,
+                user: payload.user || previousAuth.user || payload,
+                isAuthenticated: true,
+                verifyTrigger: false,
+            });
+            root._persist = root._persist || JSON.stringify({ version: -1, rehydrated: true });
+            localStorage.setItem("persist:root", JSON.stringify(root));
+        }""",
+        {"payload": payload},
+    )
+
+
+async def login_email_visible(page: Page) -> bool:
+    try:
+        email = page.get_by_placeholder("이메일").first
+        return await email.count() > 0 and await email.is_visible()
+    except Exception:
+        return False
+
+
 async def has_login_required_popup(page: Page) -> bool:
     popup = page.get_by_text("로그인 후 이용해주세요.", exact=False)
     try:
@@ -39,14 +89,14 @@ async def close_login_required_popup(page: Page):
     close_btn = page.get_by_role("button", name="닫기")
     if await close_btn.count() > 0:
         await close_btn.first.click(timeout=3000)
-        await asyncio.sleep(0.5)
+        await short_pause()
 
 
 async def is_logged_in_home(page: Page) -> bool:
     if await has_login_required_popup(page):
         return False
 
-    if await page.get_by_placeholder("이메일").count() > 0:
+    if await login_email_visible(page):
         return False
 
     selectors = [
@@ -126,15 +176,15 @@ async def enter_password_by_keypad(page: Page, password: str):
         else:
             raise RuntimeError(f"지원하지 않는 문자: {ch}")
 
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(0.12)
 
     try:
         await click_keypad_command(page, "enter")
-        await asyncio.sleep(0.5)
+        await short_pause()
     except Exception:
         try:
             await click_keypad_command(page, "close")
-            await asyncio.sleep(0.5)
+            await short_pause()
         except Exception:
             pass
 
@@ -237,14 +287,26 @@ async def open_login_form(page: Page):
     raise RuntimeError(f"로그인 진입 버튼을 찾지 못했습니다: {last_error}")
 
 
+async def open_password_form(page: Page):
+    password_input = page.get_by_placeholder("비밀번호").first
+    try:
+        if await password_input.count() > 0 and await password_input.is_visible():
+            return
+    except Exception:
+        pass
+
+    await page.get_by_role("button", name="로그인", exact=True).click(timeout=3000)
+    await password_input.wait_for(state="visible", timeout=5000)
+
+
 async def perform_login(page: Page):
     if await has_login_required_popup(page):
         await log("🔐 로그인 필요 팝업 감지 - 자동 로그인 진행")
         await close_login_required_popup(page)
-        await asyncio.sleep(0.5)
+        await short_pause()
 
-    await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=20000)
-    await asyncio.sleep(2)
+    if not page.url.startswith(BASE_URL):
+        await page.goto(BASE_URL, wait_until="commit", timeout=10000)
 
     if await is_logged_in_home(page):
         return
@@ -256,41 +318,66 @@ async def perform_login(page: Page):
     email_input = page.locator("input[placeholder='이메일']")
     await email_input.wait_for(state="visible", timeout=8000)
     await email_input.fill("")
-    await email_input.type(LOGIN_EMAIL, delay=60)
-    await asyncio.sleep(0.8)
+    await email_input.fill(LOGIN_EMAIL)
+    await short_pause()
     await log("🔐 로그인 이메일 입력 완료")
     await capture_checkpoint(page, "login_email_entered")
 
-    await page.get_by_placeholder("비밀번호").click()
-    await asyncio.sleep(0.8)
+    await open_password_form(page)
+    await page.get_by_placeholder("비밀번호").click(timeout=3000)
+    await short_pause(0.3)
     await enter_password_by_keypad(page, LOGIN_PASSWORD)
-    await asyncio.sleep(0.8)
+    await short_pause(0.3)
     await log("🔐 로그인 비밀번호 입력 완료")
     await capture_checkpoint(page, "login_password_entered")
 
     confirm_candidates = [
+        page.get_by_role("button", name="확인", exact=True),
+        page.locator("button:has-text('확인')").first,
         page.get_by_role("button", name="로그인", exact=True),
         page.locator("button.bg-primary.text-white.w-full:has-text('로그인')"),
         page.locator("section button:has-text('로그인')").first,
-        page.locator("button.bg-primary.text-white.w-full:has-text('확인')"),
     ]
     last_error = None
     for confirm_btn in confirm_candidates:
         try:
-            await confirm_btn.wait_for(state="visible", timeout=5000)
+            if await confirm_btn.count() == 0:
+                continue
+            await confirm_btn.wait_for(state="visible", timeout=1000)
+            try:
+                if not await confirm_btn.is_enabled():
+                    continue
+            except Exception:
+                pass
             async with page.expect_response(
                 lambda response: WEB_SIGNIN_API in response.url,
-                timeout=15000,
+                timeout=8000,
             ) as response_info:
-                await confirm_btn.click(timeout=5000)
+                await confirm_btn.click(timeout=2500)
             response = await response_info.value
+            response_data = None
             try:
                 setattr(page, "gohanpass_web_signin_status", response.status)
-                setattr(page, "gohanpass_web_signin_json", await response.json())
+                response_data = await response.json()
+                setattr(page, "gohanpass_web_signin_json", response_data)
             except Exception:
                 setattr(page, "gohanpass_web_signin_status", response.status)
                 setattr(page, "gohanpass_web_signin_json", None)
-            await asyncio.sleep(4)
+            result_code = response_data.get("resultCode") if isinstance(response_data, dict) else None
+            result_message = response_data.get("resultMessage") if isinstance(response_data, dict) else None
+            await log(f"🔐 web-signin 응답 확인: status={response.status}, resultCode={result_code}, message={result_message}")
+            if result_code not in ("0", 0):
+                raise RuntimeError(f"web-signin 실패: {result_message or result_code or '응답 JSON 없음'}")
+            if isinstance(response_data, dict):
+                await apply_web_signin_state(page, response_data)
+            await page.goto(BASE_URL, wait_until="commit", timeout=10000)
+            try:
+                await page.wait_for_selector("button[aria-label='select_region']", timeout=3500)
+            except Exception:
+                try:
+                    await page.wait_for_selector("text=한국에서 뭐하지?", timeout=1500)
+                except Exception:
+                    await short_pause(0.3)
             return
         except Exception as e:
             last_error = e
@@ -303,7 +390,7 @@ async def verify_authenticated(page: Page):
         await log("🔐 로그인 필요 팝업 재감지 - 자동 로그인 재시도")
         await perform_login(page)
 
-    if await page.get_by_placeholder("이메일").count() > 0:
+    if await login_email_visible(page):
         raise RuntimeError("로그인 입력 화면이 남아있습니다.")
 
     try:
@@ -318,9 +405,11 @@ async def ensure_logged_in(page: Page):
         await close_login_required_popup(page)
     elif await is_logged_in_home(page):
         await log("🔐 로그인 상태 확인 완료")
+        await save_auth_state(page)
         return
 
     await log("🔐 로그인 상태 없음 - 자동 로그인 시작")
     await perform_login(page)
     await verify_authenticated(page)
+    await save_auth_state(page)
     await log("🔐 자동 로그인 완료")
