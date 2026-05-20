@@ -74,6 +74,22 @@ async def login_email_visible(page: Page) -> bool:
         return False
 
 
+async def wait_for_home_or_login(page: Page, timeout_seconds: float = 5):
+    deadline = asyncio.get_running_loop().time() + timeout_seconds
+    while asyncio.get_running_loop().time() < deadline:
+        if await is_logged_in_home(page):
+            return
+        if await login_email_visible(page):
+            return
+        try:
+            login_text = page.get_by_text("로그인하기", exact=False).first
+            if await login_text.count() > 0 and await login_text.is_visible():
+                return
+        except Exception:
+            pass
+        await asyncio.sleep(0.2)
+
+
 async def has_login_required_popup(page: Page) -> bool:
     popup = page.get_by_text("로그인 후 이용해주세요.", exact=False)
     try:
@@ -400,6 +416,10 @@ async def verify_authenticated(page: Page):
 
 
 async def ensure_logged_in(page: Page):
+    if not page.url.startswith(BASE_URL):
+        await page.goto(BASE_URL, wait_until="commit", timeout=10000)
+        await wait_for_home_or_login(page)
+
     if await has_login_required_popup(page):
         await log("🔐 로그인 필요 팝업 감지 - 자동 로그인 시작")
         await close_login_required_popup(page)

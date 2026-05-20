@@ -1,16 +1,11 @@
 import asyncio
 import json
-from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List
 
 from playwright.async_api import Page
 
 from scenarios._auth import ensure_logged_in, has_login_required_popup
 
-
-scenario_name = Path(__file__).stem
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 HOME_URL = "https://go.hanpass.com"
 MAX_MENU_ITEMS = 80
@@ -96,8 +91,8 @@ async def goto_home(page: Page, force_reload: bool = False):
     if not force_reload and "go.hanpass.com" in page.url and await is_logged_in_home(page):
         return
 
-    await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=20000)
-    await asyncio.sleep(1.2)
+    await page.goto(HOME_URL, wait_until="commit", timeout=10000)
+    await asyncio.sleep(0.4)
 
     if await is_logged_in_home(page):
         return
@@ -120,7 +115,7 @@ async def dismiss_service_popup(page: Page) -> bool:
             confirm_btn = page.get_by_role("button", name="확인")
             if await confirm_btn.count() > 0:
                 await confirm_btn.first.click(timeout=3000)
-                await asyncio.sleep(0.8)
+                await asyncio.sleep(0.25)
                 return True
     except Exception:
         pass
@@ -140,7 +135,7 @@ async def close_overlay_if_visible(page: Page) -> bool:
             target = page.locator(selector).first
             if await target.count() > 0 and await target.is_visible():
                 await target.click(timeout=2500)
-                await asyncio.sleep(0.8)
+                await asyncio.sleep(0.25)
                 return True
         except Exception:
             pass
@@ -162,7 +157,7 @@ async def open_full_menu(page: Page):
             if await target.count() == 0:
                 continue
             await target.click(timeout=4000)
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.35)
             return
         except Exception as e:
             last_error = e
@@ -279,7 +274,7 @@ async def collect_all_menu_items(page: Page) -> List[Dict[str, Any]]:
             await scroll_container.evaluate("(el) => el.scrollBy(0, 650)")
         except Exception:
             await page.mouse.wheel(0, 650)
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.1)
 
         try:
             after = await scroll_container.evaluate("(el) => el.scrollTop || window.scrollY || 0")
@@ -308,7 +303,7 @@ async def click_collected_item(page: Page, item: Dict[str, Any]):
         await scroll_container.evaluate("(el, y) => { el.scrollTop = y; }", scroll_top)
     except Exception:
         await page.evaluate("(y) => window.scrollTo(0, y)", scroll_top)
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(0.1)
 
     label = item["label"]
     locators = []
@@ -327,13 +322,13 @@ async def click_collected_item(page: Page, item: Dict[str, Any]):
                 continue
             await locator.scroll_into_view_if_needed()
             await locator.click(timeout=3000)
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.35)
             return
         except Exception:
             pass
 
     await page.mouse.click(item["centerX"], item["centerY"])
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
 
 
 async def inspect_after_click(page: Page, before_url: str, before_text_len: int) -> str:
@@ -364,8 +359,8 @@ async def recover_home(page: Page):
         return
 
     try:
-        await page.go_back(wait_until="domcontentloaded", timeout=5000)
-        await asyncio.sleep(0.8)
+        await page.go_back(wait_until="commit", timeout=5000)
+        await asyncio.sleep(0.25)
     except Exception:
         pass
 
@@ -405,17 +400,6 @@ async def run(page: Page):
             result.append((step_name, f"FAIL ({e})"))
         finally:
             await recover_home(page)
-            await asyncio.sleep(0.5)
-
-    Path("output").mkdir(exist_ok=True)
-    try:
-        await page.screenshot(
-            path=f"output/{scenario_name}_{timestamp}.png",
-            timeout=15000,
-            animations="disabled",
-            caret="hide",
-        )
-    except Exception:
-        pass
+            await asyncio.sleep(0.1)
 
     return result

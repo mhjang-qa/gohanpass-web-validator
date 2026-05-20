@@ -1,33 +1,31 @@
 import asyncio
-from datetime import datetime
-from pathlib import Path
 
-from scenarios._auth import ensure_logged_in
-
-scenario_name = Path(__file__).stem
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+from scenarios._auth import ensure_logged_in, log
 
 async def run(page):
     result = []
 
     async def step(name, func):
         try:
+            await log(f"▶ {name} 진행 중")
             await func()
             result.append((name, "PASS"))
+            await log(f"✅ {name} 완료")
         except Exception as e:
             result.append((name, f"FAIL ({str(e)})"))
+            await log(f"❌ {name} 실패: {str(e)}")
 
     await step("ensure_login", lambda: ensure_logged_in(page))
 
     async def select_region(region_name: str):
         # 지역 선택 버튼 (명확하게 1개만 잡기)
         await page.get_by_role("button", name="지역 선택").click()
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.1)
 
         # 바텀시트 내부에서만 선택
         region_sheet = page.locator("div.flex.flex-col.gap-18")
         await region_sheet.get_by_text(region_name, exact=True).click()
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.1)
 
     # 1. 위치 버튼 선택
     await step(
@@ -36,7 +34,7 @@ async def run(page):
             "button:has(img[src*='ico16-btn-arrow-down2.svg'])"
         ).click()
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
 
     # 1-1. 위치 바텀시트 닫기
     await step(
@@ -45,32 +43,32 @@ async def run(page):
             "button:has(img[src*='ico18-close.svg'])"
         ).click()
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
 
     # 2. 날씨 화면 진입
     await step(
         "weather_click",
         lambda: page.locator("button:has-text('℃')").first.click()
     )
-    await asyncio.sleep(2)
+    await asyncio.sleep(0.25)
 
     # 2-1. 아래로 스크롤
     async def scroll_down():
         for _ in range(3):
             await page.mouse.wheel(0, 800)
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.12)
 
     await step("scroll_down", scroll_down)
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
 
     # 2-2. 위로 스크롤
     async def scroll_up():
         for _ in range(2):
             await page.mouse.wheel(0, -800)
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(0.1)
 
     await step("scroll_up", scroll_up)
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
     
     # 2-3. 지역선택 아이콘 선택
     for region in ["서울", "인천", "부산"]:
@@ -78,7 +76,7 @@ async def run(page):
             f"select_region_{region}",
             lambda r=region: select_region(r)
         )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
     
 
     # 2-9. 뒤로가기
@@ -88,7 +86,7 @@ async def run(page):
             "button:has(img[src*='ico24-back.svg'])"
         ).click()
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
     
     # 3. 전체 메뉴 진입
     await step(
@@ -97,25 +95,25 @@ async def run(page):
             "button:has(img[src*='icon_main_menu.svg'])"
         ).click()
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
     
     # 3-1. 아래로 스크롤
     async def scroll_down():
         for _ in range(3):
             await page.mouse.wheel(0, 800)
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.12)
 
     await step("scroll_down", scroll_down)
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
 
     # 3-2. 위로 스크롤
     async def scroll_up():
         for _ in range(2):
             await page.mouse.wheel(0, -800)
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(0.1)
 
     await step("scroll_up", scroll_up)
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
     
     # 3-3. 고객센터 이동
     await step(
@@ -124,7 +122,7 @@ async def run(page):
             "button:has(img[src*='ico24_headphones.svg'])"
         ).click()
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
     # 3-9. 고객센터 에서 뒤로가기
     await step(
         "memu_back_click",
@@ -132,7 +130,7 @@ async def run(page):
             "button:has(img[src*='ico24-back.svg'])"
         ).click()
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
 
     # 4. 푸시 노티 알림 확인
     await step(
@@ -141,14 +139,14 @@ async def run(page):
             "button:has(img[src*='ico20-caution-light-gray.svg'])"
         ).click()
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
     
     # 4-9. 푸시 알림 뒤로가기
     await step(
         "menu_back_click",
         lambda: page.go_back()
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
     
     # 5. 월렛 bs 확인
     await step(
@@ -157,7 +155,7 @@ async def run(page):
             "button:has(img[src*='ico16-line-info.svg'])"
         ).click()
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
     # 5-1. bs 닫기
     await step(
         "memu_back_click",
@@ -165,28 +163,28 @@ async def run(page):
             "button:has(img[src*='ico18-close.svg'])"
         ).click()
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
     
     # 3-1. 아래로 스크롤
     async def scroll_down():
         for _ in range(3):
             await page.mouse.wheel(0, 800)
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.12)
 
     await step("main_scroll_down", scroll_down)
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
     
     # 6. 추천여행지 가로 롤링 배너우측 스와이프
     async def swipe_banner_right():
         banner = page.locator("div.overflow-x-auto.scroll-hidden").first
         await banner.evaluate("(el) => el.scrollBy({ left: 220, behavior: 'smooth' })")
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.35)
 
     await step("banner_swipe_right", swipe_banner_right)
     async def swipe_banner_left():
         banner = page.locator("div.overflow-x-auto.scroll-hidden").first
         await banner.evaluate("(el) => el.scrollBy({ left: -220, behavior: 'smooth' })")
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.35)
 
     await step("banner_swipe_left", swipe_banner_left)
     
@@ -197,7 +195,7 @@ async def run(page):
             "button:has(img[src*='transport-img-01@4x.png'])"
         ).click()
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
     
     #7-1. 교통카드 충전 bs 닫기
     await step(
@@ -206,7 +204,7 @@ async def run(page):
             "button:has(img[src*='ico18-close.svg'])"
         ).click()
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
   
    
     #8. 텍시
@@ -216,7 +214,7 @@ async def run(page):
             "button:has(img[src*='transport-img-02@4x.png'])"
         ).click()
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
     
     #8-1. 택시 bs 닫기
     await step(
@@ -225,7 +223,7 @@ async def run(page):
             "button:has(img[src*='ico18-close.svg'])"
         ).click()
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
 
     #9. 버스
     await step(
@@ -234,18 +232,21 @@ async def run(page):
             "button:has(img[src*='transport-img-04@4x.png'])"
         ).click()
     )
-    await asyncio.sleep(3)
+    await asyncio.sleep(0.25)
     
     #9-1. 버스 뒤로 가기
     await step(
         "menu_back_click",
         lambda: page.go_back()
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
     
     #10. 여행 컨텐츠 더보기
-    await page.get_by_role("button", name="여행 컨텐츠 더보기").click()
-    await asyncio.sleep(1)
+    await step(
+        "travel_content_more_click",
+        lambda: page.get_by_role("button", name="여행 컨텐츠 더보기").click()
+    )
+    await asyncio.sleep(0.35)
     
     #10-1. 한국에서 뭐하지 bs 닫기
     await step(
@@ -254,7 +255,7 @@ async def run(page):
             "button:has(img[src*='ico18-close.svg'])"
         ).click()
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
 
 
     # 99. 홈 복귀 검증
@@ -265,15 +266,5 @@ async def run(page):
             await page.wait_for_selector("text=한국에서 뭐하지?", timeout=3000)
 
     await step("home_result_check", check_home_success)
-
-    try:
-        await page.screenshot(
-            path=f"output/{scenario_name}_{timestamp}.png",
-            timeout=15000,
-            animations="disabled",
-            caret="hide",
-        )
-    except Exception:
-        pass
 
     return result

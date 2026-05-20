@@ -1,15 +1,9 @@
 import asyncio
-from pathlib import Path
-from datetime import datetime
 from typing import List, Tuple
 
 from playwright.async_api import Page
 
 from scenarios._auth import ensure_logged_in
-
-
-scenario_name = Path(__file__).stem
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
 async def log(message: str):
@@ -38,7 +32,7 @@ async def dismiss_service_popup(page: Page) -> bool:
             confirm_btn = page.get_by_role("button", name="확인")
             if await confirm_btn.count() > 0:
                 await confirm_btn.first.click()
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.35)
                 return True
     except Exception:
         pass
@@ -88,8 +82,8 @@ async def goto_home(page: Page, home_url: str):
     if await is_home_ready(page):
         return
 
-    await page.goto(home_url, wait_until="domcontentloaded")
-    await asyncio.sleep(1.5)
+    await page.goto(home_url, wait_until="commit", timeout=10000)
+    await asyncio.sleep(0.1)
     await assert_authenticated(page)
 
 
@@ -108,14 +102,14 @@ async def open_travel_tab(page: Page):
                 continue
 
             await loc.scroll_into_view_if_needed()
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.12)
 
             try:
                 await loc.click(timeout=3000)
             except Exception:
                 await loc.click(timeout=3000, force=True)
 
-            await asyncio.sleep(1.5)
+            await asyncio.sleep(0.1)
             await assert_authenticated(page)
             return
         except Exception as e:
@@ -138,14 +132,14 @@ async def safe_back_to_travel(page: Page, home_url: str):
             loc = page.locator(selector).first
             if await loc.count():
                 await loc.click(timeout=2000)
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.35)
                 return
         except Exception:
             pass
 
     try:
-        await page.go_back(wait_until="domcontentloaded", timeout=5000)
-        await asyncio.sleep(1)
+        await page.go_back(wait_until="commit", timeout=5000)
+        await asyncio.sleep(0.35)
         return
     except Exception:
         pass
@@ -170,7 +164,7 @@ async def click_target(page: Page, label: str, selectors: List[str]) -> None:
                 continue
 
             await target.scroll_into_view_if_needed()
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.1)
 
             try:
                 await target.click(timeout=4000)
@@ -187,7 +181,7 @@ async def click_target(page: Page, label: str, selectors: List[str]) -> None:
             handle = await target.element_handle()
             if handle:
                 await page.evaluate("(el) => el.click()", handle)
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.1)
                 return
 
         except Exception as e:
@@ -243,7 +237,7 @@ async def run(page: Page):
             before_len = await page.evaluate("() => document.body.innerText.length")
 
             await click_target(page, target_label, target_selectors)
-            await asyncio.sleep(0.8)
+            await asyncio.sleep(0.25)
             await assert_authenticated(page)
 
             after_url = page.url
@@ -251,19 +245,19 @@ async def run(page: Page):
 
             if before_url != after_url:
                 await log("      ↳ 페이지 이동 감지 (URL 변경)")
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.35)
 
             popup_closed = await dismiss_service_popup(page)
             if popup_closed:
                 await log("      ↳ 서비스 준비중 팝업 확인 클릭")
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.35)
 
             elif abs(after_len - before_len) > 20:
                 await log("      ↳ 화면 변화 감지 (DOM)")
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.35)
 
             await safe_back_to_travel(page, home_url)
-            await asyncio.sleep(0.8)
+            await asyncio.sleep(0.25)
 
         await step(result, f"travel_menu_{label}", check_travel_target)
 

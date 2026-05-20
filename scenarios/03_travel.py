@@ -1,14 +1,8 @@
 import asyncio
-from datetime import datetime
-from pathlib import Path
 import re
 from playwright.async_api import Page
 
 from scenarios._auth import ensure_logged_in
-
-scenario_name = Path(__file__).stem
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
 
 async def run(page):
     result = []
@@ -39,7 +33,7 @@ async def run(page):
             if await target.get_attribute("aria-selected") == "false":
                 await target.click()
 
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.35)
             result.append((result_name, "PASS"))
 
         except Exception as e:
@@ -83,7 +77,7 @@ async def run(page):
         confirm_clicked = False
 
         for _ in range(15):
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.35)
 
             if page.url != current_url:
                 url_changed = True
@@ -93,7 +87,7 @@ async def run(page):
             try:
                 if await confirm_btn.count() > 0 and await confirm_btn.first.is_visible():
                     await confirm_btn.first.click(timeout=5000)
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.35)
                     confirm_clicked = True
                     break
             except Exception:
@@ -101,20 +95,9 @@ async def run(page):
 
         # 2) URL이 바뀐 경우 외부 페이지 로딩 대기
         if url_changed:
-            try:
-                await page.wait_for_load_state("domcontentloaded", timeout=20000)
-            except Exception:
-                pass
-
-            # 필요 시 networkidle까지 추가 시도
-            try:
-                await page.wait_for_load_state("networkidle", timeout=8000)
-            except Exception:
-                pass
-
             # 뒤로가기
             try:
-                await page.go_back(timeout=20000)
+                await page.go_back(wait_until="commit", timeout=5000)
             except Exception:
                 raise RuntimeError(f"버스 외부 페이지에서 뒤로가기 실패. current_url={page.url}")
 
@@ -172,7 +155,7 @@ async def run(page):
 
         for _ in range(2):
             await scroll_container.evaluate("(el) => el.scrollBy(0, 500)")
-            await asyncio.sleep(0.6)
+            await asyncio.sleep(0.25)
 
 
 
@@ -201,7 +184,7 @@ async def run(page):
         await page.mouse.down()
         await page.mouse.move(start_x, end_y, steps=35)
         await page.mouse.up()
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.35)
 
     async def scroll_bs_list_down():
         """
@@ -213,17 +196,17 @@ async def run(page):
 
         for _ in range(2):
             await scroll_container.evaluate("(el) => el.scrollBy(0, 500)")
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.1)
 
     # 1. 여행 탭 이동
     await page.get_by_role("button").filter(
         has=page.get_by_alt_text("여행")
     ).click()
-    await asyncio.sleep(5)
+    await asyncio.sleep(1.0)
 
     # 2. 검색 창 선택
     await page.locator("input[placeholder='어디로 갈까요?']").locator("..").click()
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
 
     # 3. POI 입력
     poi_input = page.locator("input[placeholder='도착지를 입력해주세요.']")
@@ -231,15 +214,15 @@ async def run(page):
     await poi_input.click()
     await poi_input.fill("")
     await poi_input.type("국립중앙박물관", delay=80)
-    await asyncio.sleep(3)
+    await asyncio.sleep(0.25)
 
     # 자동완성 리스트 대기 후 첫번째 선택
     await page.locator("text=국립중앙박물관").first.click()
-    await asyncio.sleep(3)
+    await asyncio.sleep(0.25)
 
     # 3-1. 경로 결과 패널 스크롤
     await step("route_panel_scroll_down", scroll_route_panel_down)
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
 
     # 3-2. 교통 탭 선택
     await click_tab_if_exists("택시", "taxi_tab_click")
@@ -248,60 +231,60 @@ async def run(page):
 
     # 3-3. 뒤로가기
     await step("route_back_click_1", lambda: page.go_back())
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
 
     await step("route_back_click_2", lambda: page.go_back())
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
 
     # 4. 맛집 TOP 10
     await page.get_by_role("button", name="맛집 TOP 10").click()
-    await asyncio.sleep(2)
+    await asyncio.sleep(0.25)
 
     # 4-1. 뒤로가기
     await step("food_top10_back_click", lambda: page.go_back())
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
 
     # 4-2. 관광지/문화시설
     await page.get_by_role("button", name="관광지/문화시설").click()
-    await asyncio.sleep(2)
+    await asyncio.sleep(0.25)
 
     # Bottom Sheet 펼치기
     await step(
         "bottom_sheet_drag_up",
         lambda: drag_bottom_sheet(page, direction="up", distance=240)
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
 
     # Bottom Sheet 내부 리스트 스크롤
     await step("tour_bs_list_scroll_down", scroll_bs_list_down)
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
 
     # Bottom Sheet 접기
     await step(
         "bottom_sheet_drag_down",
         lambda: drag_bottom_sheet(page, direction="down", distance=280)
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
 
     await step("tour_back_click", lambda: page.go_back())
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
 
     # 4-3. 약국
     await step(
         "pharmacy_click",
         lambda: page.get_by_role("button", name="약국", exact=True).click()
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
 
     await step("pharmacy_back_click", lambda: page.go_back())
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
 
     # 5-1. 택시
     await step(
         "taxi_click",
         lambda: page.get_by_role("button", name="택시", exact=True).click()
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
     
     #5-1. 택시 bs닫기 
     await step(
@@ -310,58 +293,58 @@ async def run(page):
             "button:has(img[src*='ico18-close.svg'])"
         ).click()
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
     
     # 5-2. ktx
     await step(
         "ktx_click",
         lambda: page.get_by_role("button", name="KTX", exact=True).click()
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
     
     # 5-2. ktx 팝업 닫기
     await step(
         "ktx_popup_closed_click",
         lambda: page.get_by_role("button", name="확인", exact=True).click()
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
     
     # 5-3. 버스
 
     await step("bus_flow_handle", handle_bus_flow)
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
     
     # 5-4. 예약 내역 보기
     await step(
         "My_Bookings_click",
         lambda: page.get_by_role("button", name="예약내역 보기", exact=True).click()
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
     await step("My_Bookings_back_click", lambda: page.go_back())
     await step("My_Bookings_back_click", lambda: page.go_back())
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
     
     # 6.교통카드 + USIM
     await step(
         "Transit-enabled_SIM_click",
         lambda: page.get_by_role("button", name="신청하기", exact=True).click()
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
     await step("Transit-enabled_SIM_back_click", lambda: page.go_back())
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
     
     # 6-1. GO card
     await step(
         "gocard_click",
         lambda: page.get_by_role("button", name="Go Card", exact=True).click()
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
     await step("Go Card_back_click", lambda: page.go_back())
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
      
     #아래로 스크롤
     await page.evaluate("window.scrollBy(0, 800)")
-    await asyncio.sleep(1)
+    await asyncio.sleep(0.35)
     
         
 
@@ -373,15 +356,5 @@ async def run(page):
             await page.wait_for_selector("text=한국에서 뭐하지?", timeout=3000)
 
     await step("home_result_check", check_home_success)
-
-    try:
-        await page.screenshot(
-            path=f"output/{scenario_name}_{timestamp}.png",
-            timeout=15000,
-            animations="disabled",
-            caret="hide",
-        )
-    except Exception:
-        pass
 
     return result

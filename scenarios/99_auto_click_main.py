@@ -1,15 +1,9 @@
 import asyncio
-from pathlib import Path
-from datetime import datetime
 from typing import Any, Dict, List
 
 from playwright.async_api import Page
 
 from scenarios._auth import ensure_logged_in
-
-scenario_name = Path(__file__).stem
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
 
 # =========================
 # LOGGER (GUI 연결용)
@@ -60,7 +54,7 @@ async def dismiss_service_popup(page: Page) -> bool:
             btn = page.get_by_role("button", name="확인")
             if await btn.count() > 0:
                 await btn.first.click()
-                await asyncio.sleep(0.8)
+                await asyncio.sleep(0.25)
                 return True
     except Exception:
         pass
@@ -191,13 +185,13 @@ async def safe_click(page: Page, item: Dict[str, Any]):
 async def safe_back(page: Page, home_url: str):
     try:
         await page.go_back()
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.35)
         return
     except:
         pass
 
-    await page.goto(home_url)
-    await asyncio.sleep(1)
+    await page.goto(home_url, wait_until="commit", timeout=10000)
+    await asyncio.sleep(0.35)
 
 
 # =========================
@@ -208,8 +202,8 @@ async def run(page: Page):
     home_url = "https://go.hanpass.com"
 
     await step(result, "ensure_login", lambda: ensure_logged_in(page))
-    await step(result, "open_url", lambda: page.goto(home_url))
-    await asyncio.sleep(2)
+    await step(result, "open_url", lambda: page.goto(home_url, wait_until="commit", timeout=10000))
+    await asyncio.sleep(0.25)
 
     items = await get_visible_clickables(page)
     await log(f"수집된 클릭 후보: {len(items)}개")
@@ -220,30 +214,30 @@ async def run(page: Page):
         async def check_click_target(target=item, target_label=label):
             await log(f"    · 클릭 시도: {target_label}")
 
-            await page.goto(home_url)
-            await asyncio.sleep(1)
+            await page.goto(home_url, wait_until="commit", timeout=10000)
+            await asyncio.sleep(0.35)
 
             before_url = page.url
             before_len = await page.evaluate("() => document.body.innerText.length")
 
             await safe_click(page, target)
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.1)
 
             after_url = page.url
             after_len = await page.evaluate("() => document.body.innerText.length")
 
             if before_url != after_url:
                 await log("      ↳ URL 변경")
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.35)
 
             popup = await dismiss_service_popup(page)
             if popup:
                 await log("      ↳ 팝업 처리")
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.35)
 
             elif abs(after_len - before_len) > 30:
                 await log("      ↳ DOM 변경")
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.35)
 
             await safe_back(page, home_url)
 

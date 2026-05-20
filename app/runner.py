@@ -409,6 +409,8 @@ async def create_page():
     context = await browser.new_context(**context_options)
     await context.grant_permissions(["geolocation"], origin="https://go.hanpass.com")
     page = await context.new_page()
+    page.set_default_timeout(2500)
+    page.set_default_navigation_timeout(10000)
     setattr(page, "gohanpass_auth_state_path", str(auth_state_path))
     return playwright, browser, context, page
 
