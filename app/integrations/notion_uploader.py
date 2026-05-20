@@ -218,11 +218,14 @@ class NotionUploader:
             )
         return {"number": int(value)}
 
-    def _date_property(self, prop: dict, value: str) -> dict:
-        if prop.get("type") != "date":
+    def _date_property(self, prop: dict, value: str) -> dict | None:
+        prop_type = prop.get("type")
+        if prop_type == "created_time":
+            return None
+        if prop_type != "date":
             raise NotionUploadError(
-                "Notion DB 등록일 컬럼 타입이 맞지 않습니다. 등록일 컬럼 타입을 date로 설정하세요.",
-                f"Invalid date property type: {prop.get('type')}",
+                "Notion DB 등록일 컬럼 타입이 맞지 않습니다. 등록일 컬럼 타입을 date 또는 created_time으로 설정하세요.",
+                f"Invalid date property type: {prop_type}",
             )
         return {"date": {"start": value}}
 
@@ -777,24 +780,28 @@ class NotionUploader:
             scenario_snapshots=scenario_snapshots,
         )
 
+        properties = {
+            title_name: self._text_property(title_prop, title),
+            version_name: self._text_property(version_prop, version),
+            platform_name: platform_property,
+            pass_name: self._number_property(pass_prop, pass_count),
+            fail_name: self._number_property(fail_prop, fail_count),
+            na_name: self._number_property(na_prop, na_count),
+            total_name: self._number_property(total_prop, total_count),
+            status_name: status_property,
+            test_result_name: test_result_property,
+            result_name: self._text_property(
+                result_prop,
+                self._result_summary_text(pass_count, fail_count, na_count, error_count, total_count, status),
+            ),
+        }
+        date_property = self._date_property(date_prop, today)
+        if date_property:
+            properties[date_name] = date_property
+
         payload = {
             "parent": {"database_id": self.database_id},
-            "properties": {
-                title_name: self._text_property(title_prop, title),
-                version_name: self._text_property(version_prop, version),
-                platform_name: platform_property,
-                pass_name: self._number_property(pass_prop, pass_count),
-                fail_name: self._number_property(fail_prop, fail_count),
-                na_name: self._number_property(na_prop, na_count),
-                total_name: self._number_property(total_prop, total_count),
-                status_name: status_property,
-                test_result_name: test_result_property,
-                result_name: self._text_property(
-                    result_prop,
-                    self._result_summary_text(pass_count, fail_count, na_count, error_count, total_count, status),
-                ),
-                date_name: self._date_property(date_prop, today),
-            },
+            "properties": properties,
             "children": children,
         }
 

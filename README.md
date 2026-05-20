@@ -138,7 +138,7 @@ Notion DB 필수/권장 컬럼:
 | Total | number | 전체 TC 수 |
 | 상태 | status 또는 select | 성공/실패 상태 |
 | 결과 | rich_text | 요약 결과 |
-| 등록일 | date | 등록일 |
+| 등록일 | date 또는 created_time | 등록일. created_time은 Notion이 자동 입력 |
 | 테스트 결과 | select | 테스트 성공/테스트 실패 |
 
 `테스트 결과` select 옵션:
@@ -211,5 +211,4 @@ Docker 배포 시에도 저장소 내부 `scenarios/`를 그대로 사용합니�
 - `GET /api/schedule`: 스케줄 조회
 - `POST /api/schedule`: 스케줄 저장
 - `GET /output/...`: 스냅샷/출력 파일 정적 접근
-
 
