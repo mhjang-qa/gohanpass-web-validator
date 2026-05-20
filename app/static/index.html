@@ -6,97 +6,133 @@
     <title>GO Hanpass Web Auto Validator</title>
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
+
   <body>
     <main id="loginScreen" class="login-screen" aria-label="로그인" hidden>
       <section class="login-card">
         <div class="login-brand">QA</div>
         <p class="login-kicker">GO Hanpass Automation Console</p>
         <h1>QA 자동화 대시보드</h1>
+
         <form id="loginForm" class="login-form">
           <label>
             <span>ID</span>
-            <input id="loginId" name="id" type="text" autocomplete="username" required />
+            <input
+              id="loginId"
+              name="id"
+              type="text"
+              autocomplete="username"
+              required
+            />
           </label>
+
           <label>
             <span>Password</span>
-            <input id="loginPassword" name="password" type="password" autocomplete="current-password" required />
+            <input
+              id="loginPassword"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required
+            />
           </label>
-          <p id="loginError" class="login-error" role="alert" hidden>ID 또는 Password가 올바르지 않습니다.</p>
+
+          <p id="loginError" class="login-error" role="alert" hidden>
+            ID 또는 Password가 올바르지 않습니다.
+          </p>
+
           <button type="submit" class="login-button">로그인</button>
         </form>
       </section>
     </main>
 
     <main id="appShell" class="shell app-shell" hidden>
-      <section class="hero">
+      <section class="hero compact">
         <div>
           <p class="eyebrow">GO Hanpass QA Automation</p>
           <h1>웹 자동 검증 콘솔</h1>
-          <p class="copy">웹 시나리오 자동 검증 및 QA 리포트 통합 플랫폼</p>
         </div>
+
         <div class="hero-actions">
           <div class="status">
             <span id="scheduleState">스케줄 확인중</span>
           </div>
+
           <button id="logoutBtn" class="secondary danger">로그아웃</button>
         </div>
       </section>
 
-      <section class="grid">
-        <article class="panel">
+      <section class="dashboard-layout">
+        <aside class="control-panel">
           <div class="panel-head">
             <div>
-              <h2>시나리오</h2>
-              <p>실행할 시나리오를 선택합니다.</p>
+              <h2>검증 설정</h2>
+              <p>시나리오와 실행 조건을 선택합니다.</p>
             </div>
-            <button id="runBtn">즉시 실행</button>
           </div>
-          <div id="scenarioList" class="scenario-list"></div>
+
+          <div class="field">
+            <span>시나리오</span>
+
+            <details class="scenario-dropdown" open>
+              <summary>
+                <span id="scenarioSummary">시나리오 선택</span>
+                <strong>열기</strong>
+              </summary>
+
+              <div id="scenarioList" class="scenario-list compact"></div>
+            </details>
+          </div>
+
           <label class="check">
             <input id="notionUpload" type="checkbox" checked />
             <span>Notion 자동 등록</span>
           </label>
-          <label class="field">
-            <span>스냅샷 간격(초)</span>
-            <input id="snapshotInterval" type="number" min="10" step="10" value="30" />
-          </label>
-        </article>
 
-        <article class="panel">
-          <div class="panel-head">
-            <div>
-              <h2>스케줄</h2>
-              <p>서버 기준 Asia/Seoul 시간으로 실행됩니다.</p>
-            </div>
-            <button id="saveScheduleBtn" class="secondary">저장</button>
-          </div>
           <label class="check">
             <input id="scheduleEnabled" type="checkbox" />
             <span>스케줄 활성화</span>
           </label>
+
           <label class="field">
             <span>스냅샷 간격(초)</span>
-            <input id="scheduleSnapshotInterval" type="number" min="10" step="10" value="30" />
+            <input
+              id="snapshotInterval"
+              type="number"
+              min="10"
+              step="10"
+              value="30"
+            />
           </label>
+
           <label class="field">
             <span>실행 시간</span>
             <input id="scheduleTime" type="time" value="09:00" />
           </label>
-          <div class="days" id="days"></div>
-        </article>
 
-        <article class="panel wide">
+          <div class="days" id="days"></div>
+
+          <div class="action-row">
+            <button id="runBtn">즉시 실행</button>
+            <button id="saveScheduleBtn" class="secondary">저장</button>
+          </div>
+        </aside>
+
+        <section class="result-panel">
           <div class="panel-head">
             <div>
               <h2>실행 기록</h2>
               <p>최근 실행 결과와 로그를 확인합니다.</p>
             </div>
+
             <button id="refreshBtn" class="secondary">새로고침</button>
           </div>
+
           <div id="runs" class="runs"></div>
-        </article>
+        </section>
       </section>
     </main>
+
     <script src="/static/app.js"></script>
   </body>
 </html>
