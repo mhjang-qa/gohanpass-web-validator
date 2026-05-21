@@ -149,6 +149,19 @@ class NotionUploader:
         except ValueError:
             return f"Notion API 오류 {response.status_code}: {response.text}"
 
+    def _apply_page_display_options(self, page_id: str) -> None:
+        try:
+            self._request(
+                "PATCH",
+                f"https://api.notion.com/v1/pages/{page_id}",
+                json={
+                    "is_full_width": True,
+                    "is_small_text": True,
+                },
+            )
+        except NotionUploadError:
+            pass
+
     def _get_database_schema(self):
         if self.database_schema is None:
             self.database_schema = self._request(
@@ -628,30 +641,66 @@ class NotionUploader:
     ) -> list[dict]:
         scenarios = self._scenarios_from_results(scenario_results) if scenario_results else self._parse_result_text(result_text)
         children = [
-            self._paragraph_block("테스트 요약", {"bold": True}),
-            self._bulleted_item_block(
-                f"시나리오 {len(scenarios)}개 / TC {total_count}개"
-            ),
-            self._bulleted_item_block(
-                f"상태 {status} / PASS {pass_count} / FAIL {fail_count} / N/A {na_count} / ERROR {error_count}"
-            ),
-            self._paragraph_block(
-                self._summary_text(
-                    pass_count,
-                    fail_count,
-                    na_count,
-                    error_count,
-                    total_count,
-                    status,
-                    scenarios,
-                )
-            ),
-            self._paragraph_block("테스트 상세", {"bold": True}),
+            {
+                "object": "block",
+                "type": "heading_2",
+                "heading_2": {
+                    "rich_text": [self._rich_text("테스트 요약")]
+                },
+            },
+            {
+                "object": "block",
+                "type": "callout",
+                "callout": {
+                    "rich_text": [
+                        self._rich_text(
+                            self._summary_text(
+                                pass_count,
+                                fail_count,
+                                na_count,
+                                error_count,
+                                total_count,
+                                status,
+                                scenarios,
+                            )
+                        )
+                    ],
+                    "icon": {
+                        "type": "emoji",
+                        "emoji": "📌",
+                    },
+                    "color": "gray_background",
+                },
+            },
+            {
+                "object": "block",
+                "type": "heading_2",
+                "heading_2": {
+                    "rich_text": [self._rich_text("테스트 상세")]
+                },
+            },
+            {
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [
+                        self._rich_text(
+                            f"상태: {status} | PASS {pass_count} / FAIL {fail_count} / N/A {na_count} / ERROR {error_count} / Total {total_count}"
+                        )
+                    ]
+                },
+            },
         ]
 
         for scenario in scenarios:
             children.append(
-                self._paragraph_block(scenario["name"], {"bold": True})
+                {
+                    "object": "block",
+                    "type": "heading_3",
+                    "heading_3": {
+                        "rich_text": [self._rich_text(scenario["name"])]
+                    },
+                }
             )
             children.extend(
                 self._scenario_detail_children(
@@ -828,6 +877,7 @@ class NotionUploader:
             "https://api.notion.com/v1/pages",
             json=payload,
         )
+        self._apply_page_display_options(page["id"])
 
         if attachment_paths:
             attachment_children = self._attachment_children(attachment_paths)
