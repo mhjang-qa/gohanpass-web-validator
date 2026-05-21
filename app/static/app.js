@@ -68,6 +68,15 @@ function setScenarioSelection(names = []) {
   updateScenarioSummary();
 }
 
+function syncScheduleDetailsVisibility() {
+  const enabled = document.querySelector("#scheduleEnabled").checked;
+  const details = document.querySelector("#scheduleDetails");
+
+  if (details) {
+    details.hidden = !enabled;
+  }
+}
+
 function updateScenarioSummary() {
   const summary = document.querySelector("#scenarioSummary");
 
@@ -193,6 +202,8 @@ function renderDays(selected = []) {
 function applyScheduleToForm(schedule) {
   document.querySelector("#scheduleEnabled").checked =
     Boolean(schedule.enabled);
+
+  syncScheduleDetailsVisibility();
 
   document.querySelector("#scheduleTime").value =
     schedule.time || "09:00";
@@ -483,6 +494,10 @@ document
 document
   .querySelector("#saveScheduleBtn")
   .addEventListener("click", saveSchedule);
+
+document
+  .querySelector("#scheduleEnabled")
+  .addEventListener("change", syncScheduleDetailsVisibility);
 
 document
   .querySelector("#refreshBtn")

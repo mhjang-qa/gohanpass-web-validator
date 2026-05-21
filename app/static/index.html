@@ -8,7 +8,7 @@
   </head>
 
   <body>
-    <main id="loginScreen" class="login-screen" aria-label="로그인" hidden>
+    <main id="loginScreen" class="login-screen" aria-label="로그인">
       <section class="login-card">
         <div class="login-brand">QA</div>
         <p class="login-kicker">GO Hanpass Automation Console</p>
@@ -105,12 +105,14 @@
             />
           </label>
 
-          <label class="field">
-            <span>실행 시간</span>
-            <input id="scheduleTime" type="time" value="09:00" />
-          </label>
+          <div id="scheduleDetails" class="schedule-details" hidden>
+            <label class="field">
+              <span>실행 시간</span>
+              <input id="scheduleTime" type="time" value="09:00" />
+            </label>
 
-          <div class="days" id="days"></div>
+            <div class="days" id="days"></div>
+          </div>
 
           <div class="action-row">
             <button id="runBtn">즉시 실행</button>

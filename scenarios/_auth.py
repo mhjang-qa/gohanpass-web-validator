@@ -39,6 +39,31 @@ async def save_auth_state(page: Page):
         pass
 
 
+async def load_saved_auth(page: Page) -> dict:
+    try:
+        return await page.evaluate(
+            """() => {
+                try {
+                    const root = JSON.parse(localStorage.getItem("persist:root") || "{}");
+                    return root.auth ? JSON.parse(root.auth) : {};
+                } catch (error) {
+                    return {};
+                }
+            }"""
+        )
+    except Exception:
+        return {}
+
+
+async def has_saved_auth_session(page: Page) -> bool:
+    auth = await load_saved_auth(page)
+    return bool(
+        auth.get("isAuthenticated")
+        and auth.get("session")
+        and auth.get("memberSeq")
+    )
+
+
 async def apply_web_signin_state(page: Page, response_data: dict):
     payload = response_data.get("data") if isinstance(response_data.get("data"), dict) else response_data
     session = payload.get("session")
@@ -88,6 +113,11 @@ async def wait_for_home_or_login(page: Page, timeout_seconds: float = 5):
         except Exception:
             pass
         await asyncio.sleep(0.2)
+
+
+async def go_home_and_wait(page: Page, timeout_seconds: float = 5):
+    await page.goto(BASE_URL, wait_until="commit", timeout=10000)
+    await wait_for_home_or_login(page, timeout_seconds=timeout_seconds)
 
 
 async def has_login_required_popup(page: Page) -> bool:
@@ -417,8 +447,7 @@ async def verify_authenticated(page: Page):
 
 async def ensure_logged_in(page: Page):
     if not page.url.startswith(BASE_URL):
-        await page.goto(BASE_URL, wait_until="commit", timeout=10000)
-        await wait_for_home_or_login(page)
+        await go_home_and_wait(page)
 
     if await has_login_required_popup(page):
         await log("🔐 로그인 필요 팝업 감지 - 자동 로그인 시작")
@@ -427,6 +456,15 @@ async def ensure_logged_in(page: Page):
         await log("🔐 로그인 상태 확인 완료")
         await save_auth_state(page)
         return
+
+    if await has_saved_auth_session(page):
+        await log("🔐 저장된 로그인 세션 확인 - 홈 화면 재진입")
+        await go_home_and_wait(page)
+        await close_login_required_popup(page)
+        if await is_logged_in_home(page):
+            await log("🔐 로그인 세션 재사용 완료")
+            await save_auth_state(page)
+            return
 
     await log("🔐 로그인 상태 없음 - 자동 로그인 시작")
     await perform_login(page)

@@ -543,6 +543,39 @@ class NotionUploader:
             },
         }
 
+    def _scenario_detail_children(self, scenario: dict, snapshot_paths: list[str] | None = None) -> list[dict]:
+        table_block = self._result_table_block(
+            scenario["tests"],
+            is_api=scenario.get("type") == "api",
+        )
+        if scenario.get("type") == "api" or not snapshot_paths:
+            return [table_block]
+
+        return [
+            {
+                "object": "block",
+                "type": "column_list",
+                "column_list": {
+                    "children": [
+                        {
+                            "object": "block",
+                            "type": "column",
+                            "column": {
+                                "children": [table_block],
+                            },
+                        },
+                        {
+                            "object": "block",
+                            "type": "column",
+                            "column": {
+                                "children": self._snapshot_children(snapshot_paths),
+                            },
+                        },
+                    ],
+                },
+            }
+        ]
+
     def _scenarios_from_results(self, scenario_results: list[dict]) -> list[dict]:
         scenarios = []
         for scenario in scenario_results:
@@ -638,9 +671,12 @@ class NotionUploader:
                     },
                 }
             )
-            children.append(self._result_table_block(scenario["tests"], is_api=scenario.get("type") == "api"))
-            if scenario_snapshots and scenario["name"] in scenario_snapshots:
-                children.extend(self._snapshot_children(scenario_snapshots[scenario["name"]]))
+            children.extend(
+                self._scenario_detail_children(
+                    scenario,
+                    scenario_snapshots.get(scenario["name"]) if scenario_snapshots else None,
+                )
+            )
 
         return children[:100]
 

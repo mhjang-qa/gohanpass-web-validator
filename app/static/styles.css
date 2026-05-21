@@ -339,6 +339,10 @@ h2 {
   color: white;
 }
 
+.schedule-details {
+  margin-top: 8px;
+}
+
 .days {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
