@@ -310,6 +310,24 @@ class NotionUploader:
             text["annotations"] = annotations
         return text
 
+    def _paragraph_block(self, content: str, annotations: dict | None = None) -> dict:
+        return {
+            "object": "block",
+            "type": "paragraph",
+            "paragraph": {
+                "rich_text": [self._rich_text(content, annotations)]
+            },
+        }
+
+    def _bulleted_item_block(self, content: str, annotations: dict | None = None) -> dict:
+        return {
+            "object": "block",
+            "type": "bulleted_list_item",
+            "bulleted_list_item": {
+                "rich_text": [self._rich_text(content, annotations)]
+            },
+        }
+
     def _test_case_description(self, name: str) -> str:
         normalized = name.strip()
         descriptions = {
@@ -610,66 +628,30 @@ class NotionUploader:
     ) -> list[dict]:
         scenarios = self._scenarios_from_results(scenario_results) if scenario_results else self._parse_result_text(result_text)
         children = [
-            {
-                "object": "block",
-                "type": "heading_2",
-                "heading_2": {
-                    "rich_text": [self._rich_text("테스트 요약")]
-                },
-            },
-            {
-                "object": "block",
-                "type": "callout",
-                "callout": {
-                    "rich_text": [
-                        self._rich_text(
-                            self._summary_text(
-                                pass_count,
-                                fail_count,
-                                na_count,
-                                error_count,
-                                total_count,
-                                status,
-                                scenarios,
-                            )
-                        )
-                    ],
-                    "icon": {
-                        "type": "emoji",
-                        "emoji": "📌",
-                    },
-                    "color": "gray_background",
-                },
-            },
-            {
-                "object": "block",
-                "type": "heading_2",
-                "heading_2": {
-                    "rich_text": [self._rich_text("테스트 상세")]
-                },
-            },
-            {
-                "object": "block",
-                "type": "paragraph",
-                "paragraph": {
-                    "rich_text": [
-                        self._rich_text(
-                            f"상태: {status} | PASS {pass_count} / FAIL {fail_count} / N/A {na_count} / ERROR {error_count} / Total {total_count}"
-                        )
-                    ]
-                },
-            },
+            self._paragraph_block("테스트 요약", {"bold": True}),
+            self._bulleted_item_block(
+                f"시나리오 {len(scenarios)}개 / TC {total_count}개"
+            ),
+            self._bulleted_item_block(
+                f"상태 {status} / PASS {pass_count} / FAIL {fail_count} / N/A {na_count} / ERROR {error_count}"
+            ),
+            self._paragraph_block(
+                self._summary_text(
+                    pass_count,
+                    fail_count,
+                    na_count,
+                    error_count,
+                    total_count,
+                    status,
+                    scenarios,
+                )
+            ),
+            self._paragraph_block("테스트 상세", {"bold": True}),
         ]
 
         for scenario in scenarios:
             children.append(
-                {
-                    "object": "block",
-                    "type": "heading_3",
-                    "heading_3": {
-                        "rich_text": [self._rich_text(scenario["name"])]
-                    },
-                }
+                self._paragraph_block(scenario["name"], {"bold": True})
             )
             children.extend(
                 self._scenario_detail_children(
