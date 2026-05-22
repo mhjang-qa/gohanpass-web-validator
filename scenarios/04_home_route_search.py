@@ -1,0 +1,123 @@
+import asyncio
+
+from scenarios._auth import BASE_URL, ensure_logged_in, has_login_required_popup, is_logged_in_home, log
+
+
+async def run(page):
+    result = []
+
+    async def step(name, func):
+        try:
+            await log(f"▶ {name} 진행 중")
+            await func()
+            result.append((name, "PASS"))
+            await log(f"✅ {name} 완료")
+            return True
+        except Exception as e:
+            result.append((name, f"FAIL ({str(e)})"))
+            await log(f"❌ {name} 실패: {str(e)}")
+            return False
+
+    async def optional_step(name, func):
+        try:
+            await log(f"▶ {name} 진행 중")
+            await func()
+            result.append((name, "PASS"))
+            await log(f"✅ {name} 완료")
+            return True
+        except Exception as e:
+            reason = str(e).splitlines()[0] if str(e) else type(e).__name__
+            result.append((name, f"N/A ({reason})"))
+            await log(f"⚠️ {name} 생략: {reason}")
+            return False
+
+    async def goto_home():
+        if not page.url.startswith(BASE_URL):
+            await page.goto(BASE_URL, wait_until="commit", timeout=10000)
+        await ensure_logged_in(page)
+        await page.goto(BASE_URL, wait_until="commit", timeout=10000)
+        await page.wait_for_load_state("domcontentloaded", timeout=10000)
+        await asyncio.sleep(0.5)
+        if not await is_logged_in_home(page):
+            raise RuntimeError("홈 화면을 확인하지 못했습니다.")
+
+    async def click_first_visible(locators, timeout=8000):
+        last_error = None
+        for locator in locators:
+            try:
+                target = locator.first
+                await target.wait_for(state="visible", timeout=timeout)
+                try:
+                    await target.click(timeout=3000)
+                except Exception:
+                    await target.click(timeout=3000, force=True)
+                return
+            except Exception as e:
+                last_error = e
+        raise RuntimeError(f"클릭 대상 미노출: {last_error}")
+
+    async def close_login_popup_if_visible():
+        if not await has_login_required_popup(page):
+            return False
+        close_btn = page.get_by_role("button", name="닫기").first
+        if await close_btn.count() > 0:
+            await close_btn.click(timeout=3000)
+        return True
+
+    async def route_recommendation_visible():
+        await page.get_by_role("button", name="출발지").first.wait_for(state="visible", timeout=8000)
+        await page.get_by_role("button", name="도착지").first.wait_for(state="visible", timeout=8000)
+        await page.locator("button:has(img[alt='검색'])").first.wait_for(state="visible", timeout=8000)
+
+    async def open_departure_selector():
+        await click_first_visible([
+            page.get_by_role("button", name="출발지"),
+            page.locator("button[aria-label='출발지']"),
+        ])
+        await asyncio.sleep(0.5)
+        if await close_login_popup_if_visible():
+            return
+        await page.get_by_text("출발지", exact=False).first.wait_for(state="visible", timeout=5000)
+
+    async def open_arrival_selector():
+        await goto_home()
+        await click_first_visible([
+            page.get_by_role("button", name="도착지"),
+            page.locator("button[aria-label='도착지']"),
+        ])
+        await asyncio.sleep(0.5)
+        if await close_login_popup_if_visible():
+            return
+        await page.get_by_text("도착지", exact=False).first.wait_for(state="visible", timeout=5000)
+
+    async def execute_route_search():
+        await goto_home()
+        await click_first_visible([
+            page.locator("button:has(img[alt='검색'])"),
+            page.locator("button:has(img[src*='ico24-search.svg'])"),
+        ])
+        await asyncio.sleep(1.0)
+        if await close_login_popup_if_visible():
+            return
+        route_markers = [
+            page.get_by_text("택시", exact=True),
+            page.get_by_text("버스", exact=True),
+            page.get_by_text("KTX", exact=True),
+            page.get_by_text("경로", exact=False),
+        ]
+        for marker in route_markers:
+            try:
+                if await marker.first.count() > 0 and await marker.first.is_visible():
+                    return
+            except Exception:
+                pass
+        raise RuntimeError("추천 경로 검색 결과 또는 보호 팝업을 확인하지 못했습니다.")
+
+    await step("ensure_login", lambda: ensure_logged_in(page))
+    await step("open_home", goto_home)
+    await step("route_recommendation_visible", route_recommendation_visible)
+    await optional_step("departure_selector_open", open_departure_selector)
+    await optional_step("arrival_selector_open", open_arrival_selector)
+    await step("route_search_click", execute_route_search)
+
+    return result

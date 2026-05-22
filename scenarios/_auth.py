@@ -454,7 +454,15 @@ async def open_password_form(page: Page):
     except Exception:
         pass
 
-    await page.get_by_role("button", name="로그인", exact=True).click(timeout=3000)
+    login_button = page.get_by_role("button", name="로그인", exact=True).first
+    await login_button.wait_for(state="visible", timeout=5000)
+    try:
+        await login_button.click(timeout=3000)
+    except Exception:
+        try:
+            await login_button.click(timeout=3000, force=True)
+        except Exception:
+            await login_button.evaluate("el => el.click()")
     await password_input.wait_for(state="visible", timeout=5000)
 
 
