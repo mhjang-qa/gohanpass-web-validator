@@ -19,6 +19,7 @@ from app.storage import save_run
 
 RUN_LOCK = asyncio.Lock()
 CURRENT_RUN_ID: str | None = None
+CURRENT_RUN: dict | None = None
 RUN_TASKS: dict[str, asyncio.Task] = {}
 
 
@@ -48,6 +49,23 @@ def normalize_result(raw_result) -> dict:
         return {"name": str(raw_result[0]), "status": str(raw_result[1])}
 
     return {"name": "scenario_result", "status": f"ERROR (invalid result: {raw_result})"}
+
+
+def execution_failed(scenarios: list[dict], error_count: int) -> bool:
+    if error_count > 0:
+        return True
+
+    for scenario in scenarios:
+        results = scenario.get("results", [])
+        if not results:
+            return True
+        for item in results:
+            name = str(item.get("name", ""))
+            status = str(item.get("status") or item.get("result") or "")
+            if name == "scenario_execution" and status.upper().startswith(("FAIL", "ERROR")):
+                return True
+
+    return False
 
 
 def create_run_record(
@@ -86,6 +104,10 @@ def create_run_record(
 def append_run_log(run: dict, message: str):
     run["logs"].append(message)
     save_run(run)
+
+
+def get_current_run() -> dict | None:
+    return CURRENT_RUN
 
 
 def update_run_progress(run: dict, percent: int, label: str, current: int | None = None) -> None:
@@ -166,9 +188,10 @@ def _is_meaningful_snapshot(path: Path) -> bool:
 
 
 async def execute_run(run: dict, scenario_paths: list[Path], notion_upload: bool = True) -> dict:
-    global CURRENT_RUN_ID
+    global CURRENT_RUN_ID, CURRENT_RUN
 
     CURRENT_RUN_ID = run["id"]
+    CURRENT_RUN = run
     playwright = browser = context = page = None
     snapshot_stop = asyncio.Event()
     snapshot_task: asyncio.Task | None = None
@@ -256,7 +279,10 @@ async def execute_run(run: dict, scenario_paths: list[Path], notion_upload: bool
             run["notion"] = {"uploaded": True, "page_id": notion_result.get("id") if notion_result else None}
             append_run_log(run, "📝 Notion 리포트 등록 완료")
 
-        run["status"] = "completed" if run["summary"]["fail"] == 0 and run["summary"].get("error", 0) == 0 else "failed"
+        run["status"] = "failed" if execution_failed(
+            run.get("scenarios", []),
+            run["summary"].get("error", 0),
+        ) else "completed"
         update_run_progress(run, 100, "실행 완료", len(scenario_paths))
         return run
     except Exception as exc:
@@ -268,6 +294,7 @@ async def execute_run(run: dict, scenario_paths: list[Path], notion_upload: bool
         run["finished_at"] = now_iso()
         save_run(run)
         CURRENT_RUN_ID = None
+        CURRENT_RUN = None
         snapshot_stop.set()
         if snapshot_task:
             snapshot_task.cancel()

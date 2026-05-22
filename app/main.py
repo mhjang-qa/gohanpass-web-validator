@@ -67,7 +67,11 @@ async def api_scenarios():
 
 @app.get("/api/runs")
 async def api_runs():
-    return {"runs": list_runs()}
+    runs = list_runs()
+    current_run = runner.get_current_run()
+    if current_run and not any(run.get("id") == current_run.get("id") for run in runs):
+        runs.insert(0, current_run)
+    return {"runs": runs}
 
 
 @app.get("/api/runs/{run_id}")

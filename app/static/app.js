@@ -12,6 +12,8 @@ const state = {
   scenarios: [],
   schedule: null,
   refreshTimer: null,
+  activeRun: null,
+  lastRuns: [],
 };
 
 const AUTH_KEY = "gohanpass_web_validator_auth";
@@ -296,6 +298,51 @@ function renderRuns(runs) {
   }
 }
 
+function mergeRuns(serverRuns = []) {
+  const merged = [];
+  const seen = new Set();
+
+  for (const run of serverRuns) {
+    if (!run?.id) continue;
+    merged.push(run);
+    seen.add(run.id);
+  }
+
+  if (
+    state.activeRun?.id &&
+    state.activeRun.status === "running" &&
+    !seen.has(state.activeRun.id)
+  ) {
+    merged.unshift(state.activeRun);
+    seen.add(state.activeRun.id);
+  }
+
+  for (const run of state.lastRuns || []) {
+    if (!run?.id || seen.has(run.id)) continue;
+    merged.push(run);
+    seen.add(run.id);
+  }
+
+  return merged;
+}
+
+function rememberRuns(runs = []) {
+  state.lastRuns = runs.slice(0, 30);
+
+  const runningRun = runs.find((run) => run.status === "running");
+  if (runningRun) {
+    state.activeRun = runningRun;
+    return;
+  }
+
+  if (
+    state.activeRun?.id &&
+    runs.some((run) => run.id === state.activeRun.id)
+  ) {
+    state.activeRun = null;
+  }
+}
+
 function updateScheduleStateText(run, schedule) {
   const target = document.querySelector("#scheduleState");
 
@@ -346,7 +393,9 @@ async function refresh() {
   state.scenarios = scenarioData.scenarios || [];
   state.schedule = schedule;
 
-  const runningRun = runData.runs.find(
+  const runs = mergeRuns(runData.runs || []);
+
+  const runningRun = runs.find(
     (run) => run.status === "running"
   );
 
@@ -372,7 +421,9 @@ async function refresh() {
     setScenarioSelection(runningSelection);
   }
 
-  renderRuns(runData.runs || []);
+  rememberRuns(runs);
+
+  renderRuns(runs);
 
   updateScheduleStateText(runningRun, schedule);
 
@@ -399,8 +450,10 @@ async function runNow() {
     });
 
     if (run?.id) {
+      state.activeRun = run;
       updateScheduleStateText(run, state.schedule);
       setPolling(true);
+      renderRuns(mergeRuns([run]));
     }
 
     await refresh();
