@@ -37,9 +37,33 @@ async def run(page):
         await ensure_logged_in(page)
         await page.goto(BASE_URL, wait_until="commit", timeout=10000)
         await page.wait_for_load_state("domcontentloaded", timeout=10000)
-        await asyncio.sleep(0.5)
-        if not await is_logged_in_home(page):
-            raise RuntimeError("홈 화면을 확인하지 못했습니다.")
+        await wait_for_home_route()
+
+    async def wait_for_home_route(timeout_seconds: float = 12):
+        deadline = asyncio.get_running_loop().time() + timeout_seconds
+        last_error = None
+        while asyncio.get_running_loop().time() < deadline:
+            try:
+                departure = page.locator("button[aria-label='출발지']").first
+                arrival = page.locator("button[aria-label='도착지']").first
+                search = page.locator("button:has(img[alt='검색'])").first
+                if (
+                    await departure.count() > 0
+                    and await departure.is_visible()
+                    and await arrival.count() > 0
+                    and await arrival.is_visible()
+                    and await search.count() > 0
+                    and await search.is_visible()
+                ):
+                    return
+            except Exception as e:
+                last_error = e
+
+            if not await is_logged_in_home(page):
+                await ensure_logged_in(page)
+            await asyncio.sleep(0.3)
+
+        raise RuntimeError(f"홈 추천 경로 영역을 확인하지 못했습니다: {last_error}")
 
     async def click_first_visible(locators, timeout=8000):
         last_error = None
@@ -65,9 +89,7 @@ async def run(page):
         return True
 
     async def route_recommendation_visible():
-        await page.get_by_role("button", name="출발지").first.wait_for(state="visible", timeout=8000)
-        await page.get_by_role("button", name="도착지").first.wait_for(state="visible", timeout=8000)
-        await page.locator("button:has(img[alt='검색'])").first.wait_for(state="visible", timeout=8000)
+        await wait_for_home_route()
 
     async def open_departure_selector():
         await click_first_visible([
