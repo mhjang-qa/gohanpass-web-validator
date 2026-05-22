@@ -10,7 +10,7 @@ from app.config import BASE_DIR, OUTPUT_DIR
 import app.runner as runner
 from app.scenarios import list_scenarios
 from app.scheduler import apply_schedule, start_scheduler, stop_scheduler
-from app.storage import list_runs, load_run, load_schedule
+from app.storage import list_runs, load_run, load_schedule, mark_running_runs_interrupted
 
 
 app = FastAPI(title="GO Hanpass Web Auto Validator")
@@ -38,12 +38,13 @@ class ScheduleRequest(BaseModel):
 async def api_current_run():
     if not runner.CURRENT_RUN_ID:
         return {"run": None}
-    run = load_run(runner.CURRENT_RUN_ID)
+    run = runner.get_current_run() or load_run(runner.CURRENT_RUN_ID)
     return {"run": run}
 
 
 @app.on_event("startup")
 async def on_startup():
+    mark_running_runs_interrupted()
     start_scheduler()
 
 

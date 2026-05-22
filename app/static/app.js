@@ -17,6 +17,7 @@ const state = {
 };
 
 const AUTH_KEY = "gohanpass_web_validator_auth";
+const RUN_STATE_KEY = "gohanpass_web_validator_run_state";
 
 function isAuthenticated() {
   return window.sessionStorage.getItem(AUTH_KEY) === "qa";
@@ -98,6 +99,36 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function loadRunState() {
+  try {
+    const saved = JSON.parse(
+      window.sessionStorage.getItem(RUN_STATE_KEY) || "{}"
+    );
+    state.activeRun = saved.activeRun || null;
+    state.lastRuns = Array.isArray(saved.lastRuns) ? saved.lastRuns : [];
+  } catch {
+    state.activeRun = null;
+    state.lastRuns = [];
+  }
+}
+
+function saveRunState() {
+  window.sessionStorage.setItem(
+    RUN_STATE_KEY,
+    JSON.stringify({
+      activeRun: state.activeRun,
+      lastRuns: state.lastRuns.slice(0, 30),
+    })
+  );
+}
+
+function clearRunStateIfIdle() {
+  if (state.activeRun?.status === "running") {
+    return;
+  }
+  saveRunState();
 }
 
 function progressHtml(run) {
@@ -310,7 +341,6 @@ function mergeRuns(serverRuns = []) {
 
   if (
     state.activeRun?.id &&
-    state.activeRun.status === "running" &&
     !seen.has(state.activeRun.id)
   ) {
     merged.unshift(state.activeRun);
@@ -326,12 +356,49 @@ function mergeRuns(serverRuns = []) {
   return merged;
 }
 
+function markActiveRunMissingFromServer() {
+  if (!state.activeRun || state.activeRun.status !== "running") {
+    return;
+  }
+
+  state.activeRun._serverMisses = Number(state.activeRun._serverMisses || 0) + 1;
+
+  if (state.activeRun._serverMisses < 3) {
+    return;
+  }
+
+  const summary = {
+    total: state.activeRun.summary?.total || 0,
+    pass: state.activeRun.summary?.pass || 0,
+    fail: state.activeRun.summary?.fail || 0,
+    na: state.activeRun.summary?.na || 0,
+    error: Math.max(1, Number(state.activeRun.summary?.error || 0)),
+  };
+
+  state.activeRun = {
+    ...state.activeRun,
+    status: "failed",
+    summary,
+    finished_at: new Date().toISOString(),
+    progress: {
+      ...(state.activeRun.progress || {}),
+      percent: 100,
+      label: "서버 재시작 또는 실행 중단 감지",
+    },
+    logs: [
+      ...(state.activeRun.logs || []),
+      "⚠️ 서버 재시작 또는 실행 프로세스 중단으로 실행 상태를 더 이상 확인할 수 없습니다.",
+    ],
+  };
+}
+
 function rememberRuns(runs = []) {
   state.lastRuns = runs.slice(0, 30);
 
   const runningRun = runs.find((run) => run.status === "running");
   if (runningRun) {
-    state.activeRun = runningRun;
+    state.activeRun = {...runningRun, _serverMisses: 0};
+    saveRunState();
     return;
   }
 
@@ -341,6 +408,38 @@ function rememberRuns(runs = []) {
   ) {
     state.activeRun = null;
   }
+
+  clearRunStateIfIdle();
+}
+
+async function refreshRunsOnly() {
+  if (!isAuthenticated()) {
+    return;
+  }
+
+  const runData = await api("/api/runs");
+  const serverRuns = runData.runs || [];
+  const activeMissing =
+    state.activeRun?.status === "running" &&
+    !serverRuns.some((run) => run.id === state.activeRun.id);
+
+  if (activeMissing) {
+    markActiveRunMissingFromServer();
+  }
+
+  const runs = mergeRuns(serverRuns);
+  const runningRun = runs.find((run) => run.status === "running");
+
+  if (activeMissing) {
+    state.lastRuns = runs.slice(0, 30);
+  } else {
+    rememberRuns(runs);
+  }
+
+  renderRuns(runs);
+  updateScheduleStateText(runningRun, state.schedule);
+  setPolling(Boolean(runningRun));
+  saveRunState();
 }
 
 function updateScheduleStateText(run, schedule) {
@@ -363,7 +462,7 @@ function setPolling(enabled) {
   if (enabled) {
     if (!state.refreshTimer) {
       state.refreshTimer = window.setInterval(() => {
-        refresh().catch(() => {});
+        refreshRunsOnly().catch(() => {});
       }, 2000);
     }
 
@@ -428,6 +527,7 @@ async function refresh() {
   updateScheduleStateText(runningRun, schedule);
 
   setPolling(Boolean(runningRun));
+  saveRunState();
 }
 
 async function runNow() {
@@ -451,6 +551,8 @@ async function runNow() {
 
     if (run?.id) {
       state.activeRun = run;
+      state.lastRuns = mergeRuns([run]);
+      saveRunState();
       updateScheduleStateText(run, state.schedule);
       setPolling(true);
       renderRuns(mergeRuns([run]));
@@ -526,6 +628,7 @@ function handleLogin(event) {
 
 function logout() {
   window.sessionStorage.removeItem(AUTH_KEY);
+  window.sessionStorage.removeItem(RUN_STATE_KEY);
 
   setPolling(false);
 
@@ -559,6 +662,7 @@ document
 window.localStorage.removeItem(AUTH_KEY);
 
 if (isAuthenticated()) {
+  loadRunState();
   showApp();
 } else {
   showLoginAfterIntro();
