@@ -17,7 +17,7 @@ const state = {
 const AUTH_KEY = "gohanpass_web_validator_auth";
 
 function isAuthenticated() {
-  return window.localStorage.getItem(AUTH_KEY) === "qa";
+  return window.sessionStorage.getItem(AUTH_KEY) === "qa";
 }
 
 function setScreen(screen) {
@@ -455,7 +455,7 @@ function handleLogin(event) {
     document.querySelector("#loginError");
 
   if (id === "qa" && password === "qa") {
-    window.localStorage.setItem(AUTH_KEY, "qa");
+    window.sessionStorage.setItem(AUTH_KEY, "qa");
 
     error.hidden = true;
 
@@ -472,7 +472,7 @@ function handleLogin(event) {
 }
 
 function logout() {
-  window.localStorage.removeItem(AUTH_KEY);
+  window.sessionStorage.removeItem(AUTH_KEY);
 
   setPolling(false);
 
@@ -502,6 +502,8 @@ document
 document
   .querySelector("#refreshBtn")
   .addEventListener("click", refresh);
+
+window.localStorage.removeItem(AUTH_KEY);
 
 if (isAuthenticated()) {
   showApp();

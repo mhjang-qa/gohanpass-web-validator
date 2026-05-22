@@ -54,7 +54,10 @@ async def on_shutdown():
 
 @app.get("/")
 async def index():
-    return FileResponse(STATIC_DIR / "index.html")
+    return FileResponse(
+        STATIC_DIR / "index.html",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.get("/api/scenarios")
