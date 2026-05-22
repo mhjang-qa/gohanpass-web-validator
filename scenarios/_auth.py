@@ -439,10 +439,13 @@ async def verify_authenticated(page: Page):
     if await login_email_visible(page):
         raise RuntimeError("로그인 입력 화면이 남아있습니다.")
 
-    try:
-        await page.wait_for_selector("button[aria-label='select_region']", timeout=5000)
-    except Exception:
-        await page.wait_for_selector("text=한국에서 뭐하지?", timeout=3000)
+    deadline = asyncio.get_running_loop().time() + 8
+    while asyncio.get_running_loop().time() < deadline:
+        if await is_logged_in_home(page):
+            return
+        await asyncio.sleep(0.25)
+
+    raise RuntimeError("로그인 완료 후 홈 화면을 확인하지 못했습니다.")
 
 
 async def ensure_logged_in(page: Page):

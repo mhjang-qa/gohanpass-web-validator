@@ -722,6 +722,22 @@ class NotionUploader:
     ) -> str:
         return f"{status} | PASS {pass_count} / FAIL {fail_count} / N/A {na_count} / ERROR {error_count} / Total {total_count}"
 
+    def _execution_failed(self, scenario_results: list[dict] | None, error_count: int) -> bool:
+        if error_count > 0:
+            return True
+
+        for scenario in scenario_results or []:
+            results = scenario.get("results", [])
+            if not results:
+                return True
+            for item in results:
+                name = str(item.get("name", ""))
+                status = str(item.get("status") or item.get("result") or "")
+                if name == "scenario_execution" and status.upper().startswith(("FAIL", "ERROR")):
+                    return True
+
+        return False
+
     def _attachment_children(self, attachment_paths: list[str] | None) -> list[dict]:
         if not attachment_paths:
             return []
@@ -828,8 +844,9 @@ class NotionUploader:
         na_name, na_prop = self._property(["N/ A", "N/A", "NA"])
         total_name, total_prop = self._property(["Total", "TOTAL"])
         result_name, result_prop = self._property(["결과", "Result"])
+        execution_failed = self._execution_failed(scenario_results, error_count)
         test_result_name, test_result_property = self._test_result_property(
-            "테스트 성공" if fail_count == 0 else "테스트 실패"
+            "테스트 실패" if execution_failed else "테스트 성공"
         )
         date_name, date_prop = self._property(["등록일", "날짜", "Date"])
         platform_name, platform_property = self._platform_property(platform)
