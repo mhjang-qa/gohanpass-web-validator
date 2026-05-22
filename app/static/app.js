@@ -184,15 +184,16 @@ function renderScenarios(selected = []) {
 
   for (const scenario of state.scenarios) {
     const label = document.createElement("label");
+    const selected = selectedSet.has(scenario.name);
 
-    label.className = "scenario";
+    label.className = `scenario ${selected ? "selected" : ""}`;
 
     label.innerHTML = `
       <input
         type="checkbox"
         data-scenario
         value="${escapeHtml(scenario.name)}"
-        ${selectedSet.has(scenario.name) ? "checked" : ""}
+        ${selected ? "checked" : ""}
       />
       <span>${escapeHtml(scenario.name)}</span>
       <small>${escapeHtml(scenario.type || "WEB")}</small>
@@ -202,7 +203,10 @@ function renderScenarios(selected = []) {
   }
 
   list.querySelectorAll("[data-scenario]").forEach((checkbox) => {
-    checkbox.addEventListener("change", updateScenarioSummary);
+    checkbox.addEventListener("change", () => {
+      checkbox.closest(".scenario")?.classList.toggle("selected", checkbox.checked);
+      updateScenarioSummary();
+    });
   });
 
   updateScenarioSummary();

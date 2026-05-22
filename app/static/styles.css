@@ -690,9 +690,10 @@ button {
   justify-content: space-between;
   min-height: 44px;
   padding: 0 14px;
-  border: 1px solid var(--line);
+  border: 1px solid #bddbd5;
   border-radius: 10px;
-  background: #fff;
+  background: #e9f8f4;
+  color: #0f3f39;
   cursor: pointer;
   font-size: 14px;
   font-weight: 800;
@@ -714,6 +715,10 @@ button {
   gap: 8px;
   max-height: 300px;
   margin-top: 10px;
+  padding: 10px;
+  border: 1px solid #cbe5df;
+  border-radius: 12px;
+  background: #f1fbf8;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -726,11 +731,25 @@ button {
   width: 100%;
   min-height: 42px;
   padding: 9px 10px;
-  border: 1px solid var(--line);
+  border: 1px solid #d1e3df;
   border-radius: 10px;
-  background: #fff;
+  background: #fbfefd;
+  color: #1f2937;
   font-size: 14px;
   font-weight: 700;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.scenario:hover {
+  border-color: #88bdb2;
+  background: #f5fffc;
+}
+
+.scenario.selected,
+.scenario:has(input[type="checkbox"]:checked) {
+  border-color: #0f766e;
+  background: #dff7ef;
+  box-shadow: inset 4px 0 0 #0f766e;
 }
 
 .scenario input[type="checkbox"] {
@@ -756,6 +775,12 @@ button {
   font-size: 10px;
   font-weight: 900;
   text-transform: uppercase;
+}
+
+.scenario.selected small,
+.scenario:has(input[type="checkbox"]:checked) small {
+  background: #ccfbf1;
+  color: #0f766e;
 }
 
 .check input[type="checkbox"],
