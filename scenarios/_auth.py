@@ -99,6 +99,23 @@ async def login_email_visible(page: Page) -> bool:
         return False
 
 
+async def login_entry_visible(page: Page) -> bool:
+    candidates = [
+        page.locator("h2", has_text="로그인하기").first,
+        page.get_by_text("로그인하기", exact=True).first,
+        page.get_by_text("로그인하기", exact=False).first,
+    ]
+
+    for locator in candidates:
+        try:
+            if await locator.count() > 0 and await locator.is_visible():
+                return True
+        except Exception:
+            pass
+
+    return False
+
+
 async def wait_for_home_or_login(page: Page, timeout_seconds: float = 5):
     deadline = asyncio.get_running_loop().time() + timeout_seconds
     while asyncio.get_running_loop().time() < deadline:
@@ -143,6 +160,12 @@ async def is_logged_in_home(page: Page) -> bool:
         return False
 
     if await login_email_visible(page):
+        return False
+
+    if await has_saved_auth_session(page):
+        return True
+
+    if await login_entry_visible(page):
         return False
 
     selectors = [
@@ -253,9 +276,89 @@ async def open_login_form(page: Page):
     if await login_form_visible():
         return
 
+    deadline = asyncio.get_running_loop().time() + 10
+    while asyncio.get_running_loop().time() < deadline:
+        if await login_form_visible():
+            return
+        if await login_entry_visible(page):
+            break
+        await asyncio.sleep(0.2)
+
+    async def click_login_entry_from_dom() -> bool:
+        return await page.evaluate(
+            """() => {
+                const visible = (el) => {
+                    if (!el) return false;
+                    const style = window.getComputedStyle(el);
+                    const rect = el.getBoundingClientRect();
+                    return style.visibility !== "hidden"
+                        && style.display !== "none"
+                        && rect.width > 0
+                        && rect.height > 0;
+                };
+
+                const loginTitle = Array.from(document.querySelectorAll("h1,h2,h3,p,span,div"))
+                    .find((node) => visible(node) && (node.textContent || "").trim().includes("로그인하기"));
+                if (!loginTitle) return false;
+
+                const clickableSelector = [
+                    "button",
+                    "a",
+                    "[role='button']",
+                    "[onclick]",
+                    ".cursor-pointer",
+                    "[class*='cursor-pointer']",
+                ].join(",");
+
+                let scope = loginTitle;
+                for (let depth = 0; scope && depth < 8; depth += 1, scope = scope.parentElement) {
+                    if (scope.matches && scope.matches(clickableSelector) && visible(scope)) {
+                        scope.click();
+                        return true;
+                    }
+
+                    const candidates = Array.from(scope.querySelectorAll(clickableSelector))
+                        .filter(visible);
+                    const titleRect = loginTitle.getBoundingClientRect();
+                    const target = candidates.find((node) => {
+                        const rect = node.getBoundingClientRect();
+                        const nearVertically = rect.top >= titleRect.top - 24
+                            && rect.top <= titleRect.bottom + 96;
+                        const rightSide = rect.left >= titleRect.left;
+                        return nearVertically && rightSide;
+                    }) || candidates[0];
+
+                    if (target) {
+                        target.click();
+                        return true;
+                    }
+                }
+
+                const rect = loginTitle.getBoundingClientRect();
+                const points = [
+                    [rect.right + 24, rect.top + rect.height / 2],
+                    [rect.left + rect.width / 2, rect.top + rect.height / 2],
+                    [rect.right + 48, rect.top + rect.height / 2],
+                ];
+                for (const [x, y] of points) {
+                    const target = document.elementFromPoint(x, y);
+                    if (target && visible(target)) {
+                        target.click();
+                        return true;
+                    }
+                }
+
+                return false;
+            }"""
+        )
+
     selectors = [
         "h2:has-text('로그인하기') ~ button",
         "div:has(> h2:has-text('로그인하기')) button",
+        "section:has(h2:has-text('로그인하기')) button",
+        "article:has(h2:has-text('로그인하기')) button",
+        "li:has(h2:has-text('로그인하기')) button",
+        "div:has(h2:has-text('로그인하기')) [role='button']",
         "div:has(h2:has-text('로그인하기')) button:has(img[src*='ico16-btn-arrow-right'])",
         "button:has(img[src*='ico16-btn-arrow-right-grayscale-05.svg'])",
         "button:has(img[src*='ico16-btn-arrow-right'])",
@@ -269,25 +372,34 @@ async def open_login_form(page: Page):
     for selector in selectors:
         try:
             target = page.locator(selector).first
-            if await target.count() == 0:
-                continue
-            await target.click(timeout=5000, force=True)
+            await target.wait_for(state="visible", timeout=2000)
+            await target.click(timeout=8000, force=True)
             if await wait_for_login_form():
                 return
         except Exception as e:
             last_error = e
 
     try:
+        if await click_login_entry_from_dom():
+            if await wait_for_login_form():
+                return
+    except Exception as e:
+        last_error = e
+
+    try:
         clicked = await page.locator("h2", has_text="로그인하기").first.evaluate(
             """node => {
-                const row = node.closest("div");
-                const button = row ? row.querySelector("button") : null;
-                if (button) {
-                    button.click();
-                    return true;
+                let scope = node;
+                for (let depth = 0; scope && depth < 8; depth += 1, scope = scope.parentElement) {
+                    const button = scope.querySelector("button, a, [role='button'], [onclick], .cursor-pointer, [class*='cursor-pointer']");
+                    if (button) {
+                        button.click();
+                        return true;
+                    }
                 }
                 return false;
-            }"""
+            }""",
+            timeout=8000,
         )
         if clicked and await wait_for_login_form():
             return
@@ -309,7 +421,8 @@ async def open_login_form(page: Page):
                     return true;
                 }
                 return false;
-            }"""
+            }""",
+            timeout=8000,
         )
         if clicked and await wait_for_login_form():
             return
