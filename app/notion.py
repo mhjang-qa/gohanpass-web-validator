@@ -10,6 +10,23 @@ def _compact_status(value: str) -> str:
     return re.sub(r"\s+", " ", str(value)).strip()
 
 
+def _execution_failed(run: dict) -> bool:
+    if run.get("summary", {}).get("error", 0) > 0:
+        return True
+
+    for scenario in run.get("scenarios", []):
+        results = scenario.get("results", [])
+        if not results:
+            return True
+        for item in results:
+            name = str(item.get("name", ""))
+            status = str(item.get("status") or item.get("result") or "")
+            if name == "scenario_execution" and status.upper().startswith(("FAIL", "ERROR")):
+                return True
+
+    return False
+
+
 def _image_path(value: str) -> str | None:
     path_text = str(value)
     if path_text.startswith("/output/"):
@@ -77,6 +94,8 @@ def upload_to_notion(run: dict):
         if snapshots:
             scenario_snapshots[scenario["name"]] = snapshots
 
+    execution_status = "실패" if _execution_failed(run) else "성공"
+
     return uploader.upload_result(
         title=f"GO Hanpass 웹 자동리포트_{run['started_at'].replace(':', '').replace('-', '')[:15]}",
         version="1.0.0",
@@ -86,7 +105,7 @@ def upload_to_notion(run: dict):
         na_count=run["summary"]["na"],
         error_count=run["summary"].get("error", 0),
         total_count=run["summary"]["total"],
-        status="성공" if run["summary"]["fail"] == 0 and run["summary"].get("error", 0) == 0 else "실패",
+        status=execution_status,
         result_text="\n".join(result_lines),
         scenario_results=run.get("scenarios", []),
         scenario_snapshots=scenario_snapshots,
