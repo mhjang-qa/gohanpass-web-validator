@@ -2,7 +2,7 @@ import asyncio
 import re
 from playwright.async_api import Page
 
-from scenarios._auth import ensure_logged_in, is_logged_in_home, log
+from scenarios._auth import ensure_logged_in, is_logged_in_home, log, reauthenticate_if_required
 
 
 HOME_URL = "https://go.hanpass.com"
@@ -83,6 +83,9 @@ async def run(page):
                     continue
                 await target.scroll_into_view_if_needed(timeout=3000)
                 await target.click(timeout=5000)
+                if await reauthenticate_if_required(page):
+                    await goto_home()
+                    await target.click(timeout=5000)
                 await wait_for_travel_home()
                 return
             except Exception as e:
@@ -120,8 +123,12 @@ async def run(page):
     async def click_when_visible(locator, timeout: int = 8000):
         target = await wait_visible(locator, timeout=timeout)
         await target.click(timeout=5000)
+        await asyncio.sleep(0.25)
+        await reauthenticate_if_required(page)
 
     async def close_popup_or_overlay():
+        if await reauthenticate_if_required(page):
+            return
         selectors = [
             page.get_by_role("button", name="닫기", exact=True),
             page.get_by_role("button", name="확인", exact=True),

@@ -1,6 +1,6 @@
 import asyncio
 
-from scenarios._auth import BASE_URL, ensure_logged_in, has_login_required_popup, is_logged_in_home, log
+from scenarios._auth import BASE_URL, ensure_logged_in, is_logged_in_home, log, reauthenticate_if_required
 
 
 async def run(page):
@@ -28,16 +28,8 @@ async def run(page):
         if not await is_logged_in_home(page):
             raise RuntimeError("홈 화면을 확인하지 못했습니다.")
 
-    async def close_login_popup():
-        if not await has_login_required_popup(page):
-            return False
-        close_btn = page.get_by_role("button", name="닫기").first
-        if await close_btn.count() > 0:
-            await close_btn.click(timeout=3000)
-        else:
-            await page.get_by_role("button", name="확인").first.click(timeout=3000)
-        await asyncio.sleep(0.25)
-        return True
+    async def login_if_required():
+        return await reauthenticate_if_required(page)
 
     async def click_bottom_nav(alt_text: str):
         target = page.locator(f"div.fixed.bottom-0 button:has(img[alt='{alt_text}'])").last
@@ -51,7 +43,7 @@ async def run(page):
         await asyncio.sleep(0.8)
 
     async def assert_controlled_response(markers):
-        if await close_login_popup():
+        if await login_if_required():
             return
         for locator in markers:
             try:

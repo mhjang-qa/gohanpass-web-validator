@@ -1,6 +1,6 @@
 import asyncio
 
-from scenarios._auth import BASE_URL, ensure_logged_in, has_login_required_popup, is_logged_in_home, log
+from scenarios._auth import BASE_URL, ensure_logged_in, is_logged_in_home, log, reauthenticate_if_required
 
 
 async def run(page):
@@ -80,13 +80,8 @@ async def run(page):
                 last_error = e
         raise RuntimeError(f"클릭 대상 미노출: {last_error}")
 
-    async def close_login_popup_if_visible():
-        if not await has_login_required_popup(page):
-            return False
-        close_btn = page.get_by_role("button", name="닫기").first
-        if await close_btn.count() > 0:
-            await close_btn.click(timeout=3000)
-        return True
+    async def login_if_required():
+        return await reauthenticate_if_required(page)
 
     async def route_recommendation_visible():
         await wait_for_home_route()
@@ -97,7 +92,7 @@ async def run(page):
             page.locator("button[aria-label='출발지']"),
         ])
         await asyncio.sleep(0.5)
-        if await close_login_popup_if_visible():
+        if await login_if_required():
             return
         await page.get_by_text("출발지", exact=False).first.wait_for(state="visible", timeout=5000)
 
@@ -108,7 +103,7 @@ async def run(page):
             page.locator("button[aria-label='도착지']"),
         ])
         await asyncio.sleep(0.5)
-        if await close_login_popup_if_visible():
+        if await login_if_required():
             return
         await page.get_by_text("도착지", exact=False).first.wait_for(state="visible", timeout=5000)
 
@@ -119,7 +114,7 @@ async def run(page):
             page.locator("button:has(img[src*='ico24-search.svg'])"),
         ])
         await asyncio.sleep(1.0)
-        if await close_login_popup_if_visible():
+        if await login_if_required():
             return
         route_markers = [
             page.get_by_text("택시", exact=True),

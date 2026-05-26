@@ -64,6 +64,28 @@ async def has_saved_auth_session(page: Page) -> bool:
     )
 
 
+async def clear_saved_auth_session(page: Page):
+    try:
+        await page.evaluate(
+            """() => {
+                const root = JSON.parse(localStorage.getItem("persist:root") || "{}");
+                const previousAuth = root.auth ? JSON.parse(root.auth) : {};
+                root.auth = JSON.stringify({
+                    ...previousAuth,
+                    memberSeq: null,
+                    session: null,
+                    token: null,
+                    user: null,
+                    isAuthenticated: false,
+                    verifyTrigger: false,
+                });
+                localStorage.setItem("persist:root", JSON.stringify(root));
+            }"""
+        )
+    except Exception:
+        pass
+
+
 async def apply_web_signin_state(page: Page, response_data: dict):
     payload = response_data.get("data") if isinstance(response_data.get("data"), dict) else response_data
     session = payload.get("session")
@@ -149,10 +171,61 @@ async def close_login_required_popup(page: Page):
     if not await has_login_required_popup(page):
         return
 
-    close_btn = page.get_by_role("button", name="닫기")
-    if await close_btn.count() > 0:
-        await close_btn.first.click(timeout=3000)
-        await short_pause()
+    candidates = [
+        page.get_by_role("button", name="닫기").first,
+        page.get_by_role("button", name="확인").first,
+    ]
+    last_error = None
+    for button in candidates:
+        try:
+            if await button.count() == 0 or not await button.is_visible():
+                continue
+            try:
+                await button.click(timeout=2000)
+            except Exception:
+                await button.click(timeout=2000, force=True)
+            await short_pause()
+            if not await has_login_required_popup(page):
+                return
+        except Exception as e:
+            last_error = e
+            if not await has_login_required_popup(page):
+                return
+
+    try:
+        clicked = await page.evaluate(
+            """() => {
+                const text = Array.from(document.querySelectorAll("*"))
+                    .find((el) => (el.textContent || "").trim().includes("로그인 후 이용해주세요."));
+                if (!text) return true;
+                const container = text.closest("section, [role='dialog'], div");
+                const buttons = container
+                    ? Array.from(container.querySelectorAll("button"))
+                    : [];
+                const button = buttons.find((el) => /닫기|확인/.test(el.textContent || ""));
+                if (!button) return false;
+                button.click();
+                return true;
+            }"""
+        )
+        if clicked:
+            await short_pause()
+            if not await has_login_required_popup(page):
+                return
+    except Exception as e:
+        last_error = e
+
+    if await has_login_required_popup(page):
+        raise RuntimeError(f"로그인 필요 팝업을 닫지 못했습니다: {last_error}")
+
+
+async def reauthenticate_if_required(page: Page) -> bool:
+    if not await has_login_required_popup(page):
+        return False
+
+    await log("🔐 로그인 필요 팝업 감지 - 세션 갱신 로그인 진행")
+    await ensure_logged_in(page)
+    return True
 
 
 async def is_logged_in_home(page: Page) -> bool:
@@ -478,6 +551,13 @@ async def perform_login(page: Page):
     if await is_logged_in_home(page):
         return
 
+    if not await login_email_visible(page) and not await login_entry_visible(page):
+        await page.goto(BASE_URL, wait_until="commit", timeout=10000)
+        await wait_for_home_or_login(page, timeout_seconds=5)
+
+        if await is_logged_in_home(page):
+            return
+
     await close_login_required_popup(page)
     await open_login_form(page)
     await log("🔐 로그인 페이지 진입 확인")
@@ -573,15 +653,18 @@ async def ensure_logged_in(page: Page):
     if not page.url.startswith(BASE_URL):
         await go_home_and_wait(page)
 
+    force_login = False
     if await has_login_required_popup(page):
         await log("🔐 로그인 필요 팝업 감지 - 자동 로그인 시작")
         await close_login_required_popup(page)
+        await clear_saved_auth_session(page)
+        force_login = True
     elif await is_logged_in_home(page):
         await log("🔐 로그인 상태 확인 완료")
         await save_auth_state(page)
         return
 
-    if await has_saved_auth_session(page):
+    if not force_login and await has_saved_auth_session(page):
         await log("🔐 저장된 로그인 세션 확인 - 홈 화면 재진입")
         await go_home_and_wait(page)
         await close_login_required_popup(page)

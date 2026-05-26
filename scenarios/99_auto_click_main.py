@@ -3,7 +3,7 @@ from typing import Any, Dict, List
 
 from playwright.async_api import Page
 
-from scenarios._auth import ensure_logged_in
+from scenarios._auth import ensure_logged_in, reauthenticate_if_required
 
 # =========================
 # LOGGER (GUI 연결용)
@@ -222,6 +222,9 @@ async def run(page: Page):
 
             await safe_click(page, target)
             await asyncio.sleep(0.1)
+
+            if await reauthenticate_if_required(page):
+                await log("      ↳ 로그인 필요 팝업 감지 - 자동 로그인 완료")
 
             after_url = page.url
             after_len = await page.evaluate("() => document.body.innerText.length")

@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 
 from playwright.async_api import Page
 
-from scenarios._auth import ensure_logged_in, has_login_required_popup
+from scenarios._auth import ensure_logged_in, has_login_required_popup, reauthenticate_if_required
 
 
 HOME_URL = "https://go.hanpass.com"
@@ -337,6 +337,9 @@ async def inspect_after_click(page: Page, before_url: str, before_text_len: int)
         after_text_len = await page.evaluate("() => document.body.innerText.length")
     except Exception:
         after_text_len = before_text_len
+
+    if await reauthenticate_if_required(page):
+        return "로그인 필요 팝업 감지 - 자동 로그인 완료"
 
     popup_closed = await dismiss_service_popup(page)
     if popup_closed:

@@ -1,6 +1,6 @@
 import asyncio
 
-from scenarios._auth import BASE_URL, ensure_logged_in, is_logged_in_home, log
+from scenarios._auth import BASE_URL, ensure_logged_in, is_logged_in_home, log, reauthenticate_if_required
 
 
 async def run(page):
@@ -53,17 +53,16 @@ async def run(page):
         await target.wait_for(state="visible", timeout=timeout)
         try:
             await target.click(timeout=2500)
-            return
         except Exception:
-            pass
-        try:
-            await target.click(timeout=2500, force=True)
-            return
-        except Exception:
-            pass
-        await target.evaluate("el => el.click()")
+            try:
+                await target.click(timeout=2500, force=True)
+            except Exception:
+                await target.evaluate("el => el.click()")
+        await reauthenticate_if_required(page)
 
     async def close_overlay():
+        if await reauthenticate_if_required(page):
+            return
         candidates = [
             page.get_by_role("button", name="닫기"),
             page.get_by_role("button", name="확인"),

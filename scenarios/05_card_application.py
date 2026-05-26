@@ -1,6 +1,6 @@
 import asyncio
 
-from scenarios._auth import BASE_URL, ensure_logged_in, has_login_required_popup, is_logged_in_home, log
+from scenarios._auth import BASE_URL, ensure_logged_in, has_login_required_popup, is_logged_in_home, log, reauthenticate_if_required
 
 
 async def run(page):
@@ -70,7 +70,7 @@ async def run(page):
         await page.get_by_text("공항에서 받는 카드 신청", exact=False).first.click(timeout=5000)
         await asyncio.sleep(1.0)
         if await has_login_required_popup(page):
-            await close_known_overlay()
+            await reauthenticate_if_required(page)
             return
 
         markers = [

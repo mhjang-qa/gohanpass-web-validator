@@ -3,7 +3,7 @@ from typing import List, Tuple
 
 from playwright.async_api import Page
 
-from scenarios._auth import ensure_logged_in
+from scenarios._auth import ensure_logged_in, reauthenticate_if_required
 
 
 async def log(message: str):
@@ -43,10 +43,7 @@ async def assert_authenticated(page: Page):
     popup = page.get_by_text("로그인 후 이용해주세요.", exact=False)
     try:
         if await popup.count() > 0 and await popup.first.is_visible():
-            close_btn = page.get_by_role("button", name="닫기")
-            if await close_btn.count() > 0:
-                await close_btn.first.click(timeout=2000)
-            await ensure_logged_in(page)
+            await reauthenticate_if_required(page)
             return
     except RuntimeError:
         raise
