@@ -271,6 +271,18 @@ async def is_logged_in_home(page: Page) -> bool:
     return False
 
 
+async def wait_for_authenticated_home(page: Page, timeout_seconds: float = 10):
+    deadline = asyncio.get_running_loop().time() + timeout_seconds
+    while asyncio.get_running_loop().time() < deadline:
+        if await is_logged_in_home(page):
+            return
+        if await has_login_required_popup(page):
+            await reauthenticate_if_required(page)
+            continue
+        await asyncio.sleep(0.25)
+    raise RuntimeError(f"홈 화면을 확인하지 못했습니다. current_url={page.url}")
+
+
 async def click_keypad_char(page: Page, ch: str):
     selector = f"button[nfiltercode='{ch}']"
     await page.wait_for_selector(selector, timeout=5000)

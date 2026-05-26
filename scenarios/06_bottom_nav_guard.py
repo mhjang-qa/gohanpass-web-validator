@@ -1,6 +1,6 @@
 import asyncio
 
-from scenarios._auth import BASE_URL, ensure_logged_in, is_logged_in_home, log, reauthenticate_if_required
+from scenarios._auth import BASE_URL, ensure_logged_in, log, reauthenticate_if_required, wait_for_authenticated_home
 
 
 async def run(page):
@@ -22,11 +22,9 @@ async def run(page):
         if not page.url.startswith(BASE_URL):
             await page.goto(BASE_URL, wait_until="commit", timeout=10000)
         await ensure_logged_in(page)
-        await page.goto(BASE_URL, wait_until="commit", timeout=10000)
+        await page.goto(f"{BASE_URL}/home", wait_until="commit", timeout=10000)
         await page.wait_for_load_state("domcontentloaded", timeout=10000)
-        await asyncio.sleep(0.5)
-        if not await is_logged_in_home(page):
-            raise RuntimeError("홈 화면을 확인하지 못했습니다.")
+        await wait_for_authenticated_home(page)
 
     async def login_if_required():
         return await reauthenticate_if_required(page)
@@ -55,10 +53,12 @@ async def run(page):
         raise RuntimeError("탭 진입 결과 또는 보호 팝업을 확인하지 못했습니다.")
 
     async def home_tab_check():
+        await goto_home()
         await click_bottom_nav("홈")
-        await page.locator("button[aria-label='select_region']").first.wait_for(state="visible", timeout=8000)
+        await wait_for_authenticated_home(page)
 
     async def travel_tab_check():
+        await goto_home()
         await click_bottom_nav("여행")
         await assert_controlled_response([
             page.locator("input[placeholder='어디로 갈까요?']"),

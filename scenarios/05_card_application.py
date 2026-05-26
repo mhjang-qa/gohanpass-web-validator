@@ -1,6 +1,6 @@
 import asyncio
 
-from scenarios._auth import BASE_URL, ensure_logged_in, has_login_required_popup, is_logged_in_home, log, reauthenticate_if_required
+from scenarios._auth import BASE_URL, ensure_logged_in, has_login_required_popup, log, reauthenticate_if_required, wait_for_authenticated_home
 
 
 async def run(page):
@@ -35,11 +35,9 @@ async def run(page):
         if not page.url.startswith(BASE_URL):
             await page.goto(BASE_URL, wait_until="commit", timeout=10000)
         await ensure_logged_in(page)
-        await page.goto(BASE_URL, wait_until="commit", timeout=10000)
+        await page.goto(f"{BASE_URL}/home", wait_until="commit", timeout=10000)
         await page.wait_for_load_state("domcontentloaded", timeout=10000)
-        await asyncio.sleep(0.5)
-        if not await is_logged_in_home(page):
-            raise RuntimeError("홈 화면을 확인하지 못했습니다.")
+        await wait_for_authenticated_home(page)
 
     async def close_known_overlay():
         candidates = [
@@ -60,6 +58,7 @@ async def run(page):
         raise RuntimeError("닫을 수 있는 팝업/바텀시트를 찾지 못했습니다.")
 
     async def card_banner_visible():
+        await wait_for_authenticated_home(page)
         await page.get_by_text("공항에서 받는 카드 신청", exact=False).first.wait_for(
             state="visible",
             timeout=8000,
@@ -92,10 +91,7 @@ async def run(page):
             await close_known_overlay()
         except Exception:
             pass
-        await page.goto(BASE_URL, wait_until="commit", timeout=10000)
-        await asyncio.sleep(0.5)
-        if not await is_logged_in_home(page):
-            await ensure_logged_in(page)
+        await goto_home()
 
     await step("ensure_login", lambda: ensure_logged_in(page))
     await step("open_home", goto_home)
