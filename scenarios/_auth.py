@@ -171,26 +171,31 @@ async def close_login_required_popup(page: Page):
     if not await has_login_required_popup(page):
         return
 
-    candidates = [
-        page.get_by_role("button", name="닫기").first,
-        page.get_by_role("button", name="확인").first,
-    ]
     last_error = None
-    for button in candidates:
-        try:
-            if await button.count() == 0 or not await button.is_visible():
-                continue
+    deadline = asyncio.get_running_loop().time() + 3
+    while asyncio.get_running_loop().time() < deadline:
+        candidates = [
+            page.locator("button:has-text('확인')").last,
+            page.get_by_role("button", name="확인").first,
+            page.locator("button:has-text('닫기')").last,
+            page.get_by_role("button", name="닫기").first,
+        ]
+        for button in candidates:
             try:
-                await button.click(timeout=2000)
-            except Exception:
-                await button.click(timeout=2000, force=True)
-            await short_pause()
-            if not await has_login_required_popup(page):
-                return
-        except Exception as e:
-            last_error = e
-            if not await has_login_required_popup(page):
-                return
+                if await button.count() == 0 or not await button.is_visible():
+                    continue
+                try:
+                    await button.click(timeout=2000)
+                except Exception:
+                    await button.click(timeout=2000, force=True)
+                await short_pause()
+                if not await has_login_required_popup(page):
+                    return
+            except Exception as e:
+                last_error = e
+                if not await has_login_required_popup(page):
+                    return
+        await asyncio.sleep(0.15)
 
     try:
         clicked = await page.evaluate(
@@ -202,7 +207,8 @@ async def close_login_required_popup(page: Page):
                 const buttons = container
                     ? Array.from(container.querySelectorAll("button"))
                     : [];
-                const button = buttons.find((el) => /닫기|확인/.test(el.textContent || ""));
+                const button = buttons.find((el) => /확인/.test(el.textContent || ""))
+                    || buttons.find((el) => /닫기/.test(el.textContent || ""));
                 if (!button) return false;
                 button.click();
                 return true;
@@ -216,6 +222,13 @@ async def close_login_required_popup(page: Page):
         last_error = e
 
     if await has_login_required_popup(page):
+        try:
+            await page.goto(f"{BASE_URL}/home", wait_until="commit", timeout=10000)
+            await short_pause(0.4)
+            if not await has_login_required_popup(page):
+                return
+        except Exception as e:
+            last_error = e
         raise RuntimeError(f"로그인 필요 팝업을 닫지 못했습니다: {last_error}")
 
 
@@ -235,15 +248,13 @@ async def is_logged_in_home(page: Page) -> bool:
     if await login_email_visible(page):
         return False
 
-    if await has_saved_auth_session(page):
-        return True
+    if not await has_saved_auth_session(page):
+        return False
 
-    if await login_entry_visible(page):
+    if not page.url.startswith(f"{BASE_URL}/home"):
         return False
 
     selectors = [
-        'button:has(img[alt="결제"])',
-        'button:has(img[alt="여행"])',
         'button:has(img[src*="icon_main_menu.svg"])',
         'button[aria-label="select_region"]',
         'text=한국에서 뭐하지?',
@@ -562,10 +573,12 @@ async def perform_login(page: Page):
     await open_login_form(page)
     await log("🔐 로그인 페이지 진입 확인")
 
-    email_input = page.locator("input[placeholder='이메일']")
+    email_input = page.locator("input[placeholder='이메일']").first
     await email_input.wait_for(state="visible", timeout=8000)
-    await email_input.fill("")
-    await email_input.fill(LOGIN_EMAIL)
+    try:
+        await email_input.fill(LOGIN_EMAIL, timeout=8000)
+    except Exception:
+        await email_input.fill(LOGIN_EMAIL, timeout=8000, force=True)
     await short_pause()
     await log("🔐 로그인 이메일 입력 완료")
     await capture_checkpoint(page, "login_email_entered")

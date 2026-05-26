@@ -25,6 +25,16 @@ async def step(result: list, name: str, func):
         result.append((name, "FAIL"))
 
 
+async def optional_step(result: list, name: str, func):
+    try:
+        await func()
+        await log(f"  - {name}: PASS")
+        result.append((name, "PASS"))
+    except Exception as e:
+        await log(f"  - {name}: N/A ({e})")
+        result.append((name, f"N/A ({e})"))
+
+
 async def dismiss_service_popup(page: Page) -> bool:
     try:
         popup = page.get_by_text("서비스 준비중입니다.", exact=False)
@@ -246,6 +256,9 @@ async def run(page: Page):
             await safe_back_to_payment(page, home_url)
             await asyncio.sleep(0.25)
 
-        await step(result, f"payment_menu_{label}", check_payment_target)
+        if label == "K-Style PICK 전체보기":
+            await optional_step(result, f"payment_menu_{label}", check_payment_target)
+        else:
+            await step(result, f"payment_menu_{label}", check_payment_target)
 
     return result

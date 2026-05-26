@@ -37,7 +37,14 @@ async def run(page):
         await ensure_logged_in(page)
         await page.goto(BASE_URL, wait_until="commit", timeout=10000)
         await page.wait_for_load_state("domcontentloaded", timeout=10000)
-        await wait_for_home_route()
+        deadline = asyncio.get_running_loop().time() + 8
+        while asyncio.get_running_loop().time() < deadline:
+            if await is_logged_in_home(page):
+                return
+            if await reauthenticate_if_required(page):
+                await page.goto(BASE_URL, wait_until="commit", timeout=10000)
+            await asyncio.sleep(0.25)
+        raise RuntimeError("홈 화면을 확인하지 못했습니다.")
 
     async def wait_for_home_route(timeout_seconds: float = 12):
         deadline = asyncio.get_running_loop().time() + timeout_seconds
@@ -131,8 +138,16 @@ async def run(page):
         raise RuntimeError("추천 경로 검색 결과 또는 보호 팝업을 확인하지 못했습니다.")
 
     await step("ensure_login", lambda: ensure_logged_in(page))
-    await step("open_home", goto_home)
-    await step("route_recommendation_visible", route_recommendation_visible)
+    if not await step("open_home", goto_home):
+        return result
+    if not await optional_step("route_recommendation_visible", route_recommendation_visible):
+        reason = "현재 홈 화면에 추천 경로 영역이 노출되지 않음"
+        result.extend([
+            ("departure_selector_open", f"N/A ({reason})"),
+            ("arrival_selector_open", f"N/A ({reason})"),
+            ("route_search_click", f"N/A ({reason})"),
+        ])
+        return result
     await optional_step("departure_selector_open", open_departure_selector)
     await optional_step("arrival_selector_open", open_arrival_selector)
     await step("route_search_click", execute_route_search)

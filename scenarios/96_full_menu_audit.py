@@ -4,7 +4,12 @@ from typing import Any, Dict, List
 
 from playwright.async_api import Page
 
-from scenarios._auth import ensure_logged_in, has_login_required_popup, reauthenticate_if_required
+from scenarios._auth import (
+    ensure_logged_in,
+    has_login_required_popup,
+    is_logged_in_home as authenticated_home,
+    reauthenticate_if_required,
+)
 
 
 HOME_URL = "https://go.hanpass.com"
@@ -67,24 +72,7 @@ def safe_step_name(prefix: str, label: str) -> str:
 async def is_logged_in_home(page: Page) -> bool:
     if await has_login_required_popup(page):
         await ensure_logged_in(page)
-        return await is_logged_in_home(page)
-
-    selectors = [
-        'button:has(img[src*="icon_main_menu.svg"])',
-        'button[aria-label="select_region"]',
-        'text=한국에서 뭐하지?',
-        'button:has(img[alt="여행"])',
-        'button:has(img[alt="결제"])',
-    ]
-
-    for selector in selectors:
-        try:
-            loc = page.locator(selector).first
-            if await loc.count() > 0 and await loc.is_visible():
-                return True
-        except Exception:
-            pass
-    return False
+    return await authenticated_home(page)
 
 
 async def goto_home(page: Page, force_reload: bool = False):
@@ -92,18 +80,17 @@ async def goto_home(page: Page, force_reload: bool = False):
         return
 
     await page.goto(HOME_URL, wait_until="commit", timeout=10000)
-    await asyncio.sleep(0.4)
+    deadline = asyncio.get_running_loop().time() + 10
+    while asyncio.get_running_loop().time() < deadline:
+        if await is_logged_in_home(page):
+            return
 
-    if await is_logged_in_home(page):
-        return
+        if await page.get_by_placeholder("이메일").count() > 0 or await has_login_required_popup(page):
+            await ensure_logged_in(page)
+            if await is_logged_in_home(page):
+                return
 
-    if await page.get_by_placeholder("이메일").count() > 0:
-        await ensure_logged_in(page)
-        return
-
-    if await has_login_required_popup(page):
-        await ensure_logged_in(page)
-        return
+        await asyncio.sleep(0.25)
 
     raise RuntimeError("로그인 홈 화면을 확인하지 못했습니다.")
 
@@ -158,6 +145,7 @@ async def open_full_menu(page: Page):
                 continue
             await target.click(timeout=4000)
             await asyncio.sleep(0.35)
+            await find_menu_container(page)
             return
         except Exception as e:
             last_error = e
@@ -165,7 +153,19 @@ async def open_full_menu(page: Page):
     raise RuntimeError(f"전체 메뉴 버튼을 찾지 못했습니다: {last_error}")
 
 
-async def find_scroll_container(page: Page):
+async def find_menu_container(page: Page):
+    containers = page.locator("div.fixed:has-text('전체 서비스')")
+    for idx in range(await containers.count() - 1, -1, -1):
+        candidate = containers.nth(idx)
+        try:
+            if await candidate.is_visible() and await candidate.locator("button").count() > 2:
+                return candidate
+        except Exception:
+            pass
+    raise RuntimeError("전체 메뉴 레이어를 확인하지 못했습니다.")
+
+
+async def find_scroll_container(page: Page, menu_container):
     selectors = [
         "[data-radix-scroll-area-viewport]",
         "div.overflow-y-auto",
@@ -175,7 +175,7 @@ async def find_scroll_container(page: Page):
     ]
 
     for selector in selectors:
-        locator = page.locator(selector)
+        locator = menu_container.locator(selector)
         count = await locator.count()
         for idx in range(count):
             item = locator.nth(idx)
@@ -190,12 +190,12 @@ async def find_scroll_container(page: Page):
             except Exception:
                 continue
 
-    return page.locator("body").first
+    return menu_container
 
 
-async def collect_visible_menu_items(page: Page, scroll_top: int) -> List[Dict[str, Any]]:
+async def collect_visible_menu_items(menu_container, scroll_top: int) -> List[Dict[str, Any]]:
     script = """
-    (scrollTop) => {
+    (root, scrollTop) => {
         const isVisible = (el) => {
             const style = window.getComputedStyle(el);
             const rect = el.getBoundingClientRect();
@@ -210,7 +210,7 @@ async def collect_visible_menu_items(page: Page, scroll_top: int) -> List[Dict[s
             );
         };
 
-        const nodes = Array.from(document.querySelectorAll('button, a, [role="button"]'));
+        const nodes = Array.from(root.querySelectorAll('button, a, [role="button"]'));
         return nodes.filter(isVisible).map((el) => {
             const rect = el.getBoundingClientRect();
             const img = el.querySelector('img');
@@ -229,7 +229,7 @@ async def collect_visible_menu_items(page: Page, scroll_top: int) -> List[Dict[s
         });
     }
     """
-    return await page.evaluate(script, scroll_top)
+    return await menu_container.evaluate(script, scroll_top)
 
 
 def menu_label(item: Dict[str, Any], idx: int) -> str:
@@ -244,7 +244,8 @@ async def collect_all_menu_items(page: Page) -> List[Dict[str, Any]]:
     await goto_home(page)
     await open_full_menu(page)
 
-    scroll_container = await find_scroll_container(page)
+    menu_container = await find_menu_container(page)
+    scroll_container = await find_scroll_container(page, menu_container)
     collected: List[Dict[str, Any]] = []
     seen = set()
 
@@ -254,7 +255,7 @@ async def collect_all_menu_items(page: Page) -> List[Dict[str, Any]]:
         except Exception:
             scroll_top = round_idx * 700
 
-        for item in await collect_visible_menu_items(page, int(scroll_top)):
+        for item in await collect_visible_menu_items(menu_container, int(scroll_top)):
             label = menu_label(item, len(collected) + 1)
             if not is_safe_label(label):
                 continue
@@ -294,10 +295,12 @@ async def collect_all_menu_items(page: Page) -> List[Dict[str, Any]]:
 
 
 async def click_collected_item(page: Page, item: Dict[str, Any]):
-    await goto_home(page)
+    # Collection leaves the full menu layer open; reload before each replay click.
+    await goto_home(page, force_reload=True)
     await open_full_menu(page)
 
-    scroll_container = await find_scroll_container(page)
+    menu_container = await find_menu_container(page)
+    scroll_container = await find_scroll_container(page, menu_container)
     scroll_top = int(item.get("scrollTop", 0))
     try:
         await scroll_container.evaluate("(el, y) => { el.scrollTop = y; }", scroll_top)
@@ -308,13 +311,13 @@ async def click_collected_item(page: Page, item: Dict[str, Any]):
     label = item["label"]
     locators = []
     if item.get("href"):
-        locators.append(page.locator(css_attr_selector("a", "href", item["href"])).first)
+        locators.append(menu_container.locator(css_attr_selector("a", "href", item["href"])).first)
     if item.get("aria"):
-        locators.append(page.locator(css_attr_selector("*", "aria-label", item["aria"])).first)
+        locators.append(menu_container.locator(css_attr_selector("*", "aria-label", item["aria"])).first)
     if item.get("text"):
-        locators.append(page.get_by_text(item["text"], exact=True).first)
+        locators.append(menu_container.get_by_text(item["text"], exact=True).first)
     if item.get("alt"):
-        locators.append(page.locator(css_attr_selector("img", "alt", item["alt"])).first)
+        locators.append(menu_container.locator(css_attr_selector("img", "alt", item["alt"])).first)
 
     for locator in locators:
         try:

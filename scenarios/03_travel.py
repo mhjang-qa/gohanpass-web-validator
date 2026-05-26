@@ -42,8 +42,7 @@ async def run(page):
         return locator.first
 
     async def goto_home():
-        if not page.url.startswith(HOME_URL) or not await is_logged_in_home(page):
-            await page.goto(HOME_URL, wait_until="commit", timeout=10000)
+        await page.goto(HOME_URL, wait_until="commit", timeout=10000)
         await ensure_logged_in(page)
 
     async def wait_for_travel_home(timeout_seconds: float = 10):
@@ -90,6 +89,10 @@ async def run(page):
                 return
             except Exception as e:
                 last_error = e
+                try:
+                    await close_popup_or_overlay()
+                except Exception:
+                    pass
         raise RuntimeError(f"여행 탭 진입 실패: {last_error}")
 
     async def open_search_form():
