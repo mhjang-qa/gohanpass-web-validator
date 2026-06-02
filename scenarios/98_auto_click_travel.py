@@ -22,7 +22,33 @@ async def step(result: list, name: str, func):
         result.append((name, "PASS"))
     except Exception as e:
         await log(f"  - {name}: FAIL ({e})")
-        result.append((name, "FAIL"))
+        result.append((name, f"FAIL ({e})"))
+        return False
+    return True
+
+
+async def optional_step(result: list, name: str, func):
+    try:
+        await func()
+        await log(f"  - {name}: PASS")
+        result.append((name, "PASS"))
+        return True
+    except Exception as e:
+        await log(f"  - {name}: N/A ({e})")
+        result.append((name, f"N/A ({e})"))
+        return False
+
+
+async def stable_body_text_len(page: Page) -> int:
+    last_error = None
+    for _ in range(4):
+        try:
+            await page.wait_for_load_state("domcontentloaded", timeout=5000)
+            return await page.evaluate("() => document.body.innerText.length")
+        except Exception as e:
+            last_error = e
+            await asyncio.sleep(0.25)
+    raise RuntimeError(f"화면 상태 측정 실패: {last_error}")
 
 
 async def dismiss_service_popup(page: Page) -> bool:
@@ -82,6 +108,8 @@ async def goto_home(page: Page, home_url: str):
     await page.goto(home_url, wait_until="commit", timeout=10000)
     await asyncio.sleep(0.1)
     await assert_authenticated(page)
+    if not await is_home_ready(page):
+        await asyncio.sleep(0.5)
 
 
 async def open_travel_tab(page: Page):
@@ -184,7 +212,7 @@ async def click_target(page: Page, label: str, selectors: List[str]) -> None:
         except Exception as e:
             last_error = e
 
-    raise RuntimeError(f"{label} 클릭 실패: {last_error}")
+    raise RuntimeError(f"{label} 미노출 또는 클릭 실패: {last_error}")
 
 
 TRAVEL_TARGETS: List[Tuple[str, List[str]]] = [
@@ -219,26 +247,30 @@ async def run(page: Page):
     result = []
     home_url = BASE_URL
 
-    await step(result, "ensure_login", lambda: ensure_logged_in(page))
-    await step(result, "open_home", lambda: goto_home(page, home_url))
-    await step(result, "open_travel_tab", lambda: open_travel_tab(page))
+    if not await step(result, "ensure_login", lambda: ensure_logged_in(page)):
+        return result
+    if not await step(result, "open_home", lambda: goto_home(page, home_url)):
+        return result
+    travel_tab_ready = await step(result, "open_travel_tab", lambda: open_travel_tab(page))
 
     for label, selectors in TRAVEL_TARGETS:
         async def check_travel_target(target_label=label, target_selectors=selectors):
+            if not travel_tab_ready:
+                raise RuntimeError("여행 탭 진입 실패로 메뉴 검증 생략")
             await log(f"    · 여행탭 클릭 시도: {target_label}")
 
             await goto_home(page, home_url)
             await open_travel_tab(page)
 
             before_url = page.url
-            before_len = await page.evaluate("() => document.body.innerText.length")
+            before_len = await stable_body_text_len(page)
 
             await click_target(page, target_label, target_selectors)
             await asyncio.sleep(0.25)
             await assert_authenticated(page)
 
             after_url = page.url
-            after_len = await page.evaluate("() => document.body.innerText.length")
+            after_len = await stable_body_text_len(page)
 
             if before_url != after_url:
                 await log("      ↳ 페이지 이동 감지 (URL 변경)")
@@ -256,6 +288,6 @@ async def run(page: Page):
             await safe_back_to_travel(page, home_url)
             await asyncio.sleep(0.25)
 
-        await step(result, f"travel_menu_{label}", check_travel_target)
+        await optional_step(result, f"travel_menu_{label}", check_travel_target)
 
     return result

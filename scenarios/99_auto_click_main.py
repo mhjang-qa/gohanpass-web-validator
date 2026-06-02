@@ -41,7 +41,21 @@ async def step(result: list, name: str, func):
         result.append((name, "PASS"))
     except Exception as e:
         await log(f"  - {name}: FAIL ({e})")
-        result.append((name, "FAIL"))
+        result.append((name, f"FAIL ({e})"))
+        return False
+    return True
+
+
+async def stable_body_text_len(page: Page) -> int:
+    last_error = None
+    for _ in range(4):
+        try:
+            await page.wait_for_load_state("domcontentloaded", timeout=5000)
+            return await page.evaluate("() => document.body.innerText.length")
+        except Exception as e:
+            last_error = e
+            await asyncio.sleep(0.25)
+    raise RuntimeError(f"화면 상태 측정 실패: {last_error}")
 
 
 # =========================
@@ -201,8 +215,11 @@ async def run(page: Page):
     result = []
     home_url = BASE_URL
 
-    await step(result, "ensure_login", lambda: ensure_logged_in(page))
-    await step(result, "open_url", lambda: page.goto(home_url, wait_until="commit", timeout=10000))
+    if not await step(result, "ensure_login", lambda: ensure_logged_in(page)):
+        return result
+    if not await step(result, "open_url", lambda: page.goto(home_url, wait_until="commit", timeout=10000)):
+        return result
+    await ensure_logged_in(page)
     await asyncio.sleep(0.25)
 
     items = await get_visible_clickables(page)
@@ -218,7 +235,7 @@ async def run(page: Page):
             await asyncio.sleep(0.35)
 
             before_url = page.url
-            before_len = await page.evaluate("() => document.body.innerText.length")
+            before_len = await stable_body_text_len(page)
 
             await safe_click(page, target)
             await asyncio.sleep(0.1)
@@ -227,7 +244,7 @@ async def run(page: Page):
                 await log("      ↳ 로그인 필요 팝업 감지 - 자동 로그인 완료")
 
             after_url = page.url
-            after_len = await page.evaluate("() => document.body.innerText.length")
+            after_len = await stable_body_text_len(page)
 
             if before_url != after_url:
                 await log("      ↳ URL 변경")

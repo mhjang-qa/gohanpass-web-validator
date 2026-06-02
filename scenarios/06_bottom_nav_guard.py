@@ -37,7 +37,15 @@ async def run(page):
         try:
             await target.click(timeout=3000)
         except Exception:
-            await target.click(timeout=3000, force=True)
+            try:
+                await target.click(timeout=3000, force=True)
+            except Exception:
+                await target.evaluate(
+                    """node => {
+                        const button = node.closest("button") || node;
+                        button.click();
+                    }"""
+                )
         await asyncio.sleep(0.8)
 
     async def assert_controlled_response(markers):

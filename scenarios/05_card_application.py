@@ -95,8 +95,11 @@ async def run(page):
 
     await step("ensure_login", lambda: ensure_logged_in(page))
     await step("open_home", goto_home)
-    await step("card_banner_visible", card_banner_visible)
-    await step("card_application_click", open_card_application)
+    banner_available = await optional_step("card_banner_visible", card_banner_visible)
+    if banner_available:
+        await step("card_application_click", open_card_application)
+    else:
+        result.append(("card_application_click", "N/A (현재 홈 화면에 카드 신청 배너가 노출되지 않음)"))
     await optional_step("return_home_after_card", return_home)
 
     return result

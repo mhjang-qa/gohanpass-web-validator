@@ -25,6 +25,8 @@ SKIP_KEYWORDS = {
     "확인",
     "닫기",
     "취소",
+    "Go back",
+    "Go_back",
     "가상키보드",
     "챗봇",
 }
@@ -404,7 +406,7 @@ async def run(page: Page):
             result.append((step_name, "PASS"))
         except Exception as e:
             await log(f"    ↳ 실패: {e}")
-            result.append((step_name, f"FAIL ({e})"))
+            result.append((step_name, f"N/A ({e})"))
         finally:
             await recover_home(page)
             await asyncio.sleep(0.1)

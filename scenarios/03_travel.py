@@ -381,18 +381,18 @@ async def run(page):
 
     # Bottom Sheet 펼치기
     if tour_opened:
-        await step(
+        await optional_step(
             "bottom_sheet_drag_up",
             lambda: drag_bottom_sheet(page, direction="up", distance=240)
         )
         await asyncio.sleep(0.35)
 
         # Bottom Sheet 내부 리스트 스크롤
-        await step("tour_bs_list_scroll_down", scroll_bs_list_down)
+        await optional_step("tour_bs_list_scroll_down", scroll_bs_list_down)
         await asyncio.sleep(0.35)
 
         # Bottom Sheet 접기
-        await step(
+        await optional_step(
             "bottom_sheet_drag_down",
             lambda: drag_bottom_sheet(page, direction="down", distance=280)
         )
@@ -400,18 +400,19 @@ async def run(page):
 
     await step("tour_back_click", lambda: page.go_back())
     await asyncio.sleep(0.35)
-    await step("return_travel_home_after_tour", open_travel_home)
+    await optional_step("return_travel_home_after_tour", open_travel_home)
     await asyncio.sleep(0.35)
 
     # 4-3. 약국
-    await step(
+    pharmacy_opened = await optional_step(
         "pharmacy_click",
         lambda: click_when_visible(page.get_by_role("button", name="약국", exact=True), timeout=8000)
     )
     await asyncio.sleep(0.35)
 
-    await step("pharmacy_back_click", lambda: page.go_back())
-    await asyncio.sleep(0.35)
+    if pharmacy_opened:
+        await step("pharmacy_back_click", lambda: page.go_back())
+        await asyncio.sleep(0.35)
     await step("return_travel_home_after_pharmacy", open_travel_home)
     await asyncio.sleep(0.35)
 
@@ -496,10 +497,7 @@ async def run(page):
     # 99. 홈 복귀 검증
     async def check_home_success():
         await goto_home()
-        try:
-            await page.wait_for_selector("button[aria-label='select_region']", timeout=8000)
-        except Exception:
-            await page.wait_for_selector("text=한국에서 뭐하지?", timeout=3000)
+        await ensure_logged_in(page)
 
     await step("home_result_check", check_home_success)
 

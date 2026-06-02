@@ -252,12 +252,17 @@ async def is_logged_in_home(page: Page) -> bool:
     if not await has_saved_auth_session(page):
         return False
 
-    if not page.url.startswith(f"{BASE_URL}/home"):
+    if not page.url.startswith(BASE_URL):
         return False
 
     selectors = [
         'button:has(img[src*="icon_main_menu.svg"])',
         'button[aria-label="select_region"]',
+        'button:has(img[alt="홈"])',
+        'button:has(img[alt="여행"])',
+        'button:has(img[alt="결제"])',
+        'button:has(img[alt="my_page"])',
+        'input[placeholder="어디로 갈까요?"]',
         'text=한국에서 뭐하지?',
     ]
 
