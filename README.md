@@ -13,6 +13,7 @@
 - 시나리오별 PASS/FAIL/N/A/ERROR 집계
 - 웹 UI 시나리오와 API 검증 시나리오 통합 실행
 - Notion DB 자동 업로드
+- Notion 업로드 성공 후 Slack 간단 알림 전송
 - Notion 상세 페이지에 테스트 요약, 테스트 상세 표, 시나리오별 스냅샷 첨부
 - Render/Docker 배포 지원
 
@@ -47,6 +48,7 @@ NOTION_DB_ID=5ad73fbd195182bcb4b201fb9d76815f
 HEADLESS=true
 NOTION_UPLOAD=true
 TIMEZONE=Asia/Seoul
+SLACK_WEBHOOK_URL=
 ```
 
 선택:
@@ -57,6 +59,7 @@ API_BASE_URL=https://go.hanpass.com
 API_TIMEOUT_SECONDS=15
 API_TOKEN=
 API_HEADERS={}
+RESULT_DASHBOARD_URL=
 ```
 
 `SCENARIO_DIR`를 지정하지 않으면 저장소 내부 `scenarios/` 폴더를 사용합니다.
@@ -69,6 +72,15 @@ API 검증 환경변수:
 - `API_HEADERS`: 추가 헤더를 JSON object 문자열로 지정합니다. 예: `{"X-Client":"qa"}`
 
 민감정보는 `.env`에만 설정하고 시나리오 파일에는 하드코딩하지 않습니다.
+
+Slack 알림:
+
+- `SLACK_WEBHOOK_URL`: Slack Incoming Webhook URL입니다. 값이 없으면 알림만 생략되고 테스트/Notion 업로드 결과에는 영향을 주지 않습니다.
+- 대상 채널: `#slice_gh-test`
+- Slack App: `GO 한패스 QA 봇`
+- Slack 알림은 Notion 업로드가 성공한 이후에만 전송됩니다.
+- 메시지 항목은 테스트 완료 여부, 실패 건수, 결과 링크만 포함합니다.
+- 결과 링크는 Notion 페이지 URL을 우선 사용하고, 없을 경우 `RESULT_DASHBOARD_URL`, `PUBLIC_BASE_URL`, `RENDER_EXTERNAL_URL` 순서로 대체합니다.
 
 ## 시나리오
 

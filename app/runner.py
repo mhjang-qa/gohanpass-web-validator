@@ -15,6 +15,7 @@ from PIL import Image, ImageStat
 from app.config import DATA_DIR, HEADLESS, OUTPUT_DIR, SCENARIO_DIR, TIMEZONE
 from app.notion import upload_to_notion
 from app.scenarios import resolve_scenario_paths, scenario_type
+from app.services.slack_notifier import send_slack_notification
 from app.storage import save_run
 
 
@@ -312,8 +313,34 @@ async def execute_run(run: dict, scenario_paths: list[Path], notion_upload: bool
             update_run_progress(run, 92, "Notion 리포트 등록 중", len(scenario_paths))
             append_run_log(run, "📝 Notion 리포트 등록 중")
             notion_result = upload_to_notion(run)
-            run["notion"] = {"uploaded": True, "page_id": notion_result.get("id") if notion_result else None}
-            append_run_log(run, "📝 Notion 리포트 등록 완료")
+            if notion_result:
+                notion_url = notion_result.get("url")
+                run["notion"] = {
+                    "uploaded": True,
+                    "page_id": notion_result.get("id"),
+                    "url": notion_url,
+                }
+                append_run_log(run, "📝 Notion 리포트 등록 완료")
+
+                slack_sent = send_slack_notification(
+                    {
+                        "fail_count": run["summary"].get("fail", 0)
+                        + run["summary"].get("error", 0),
+                        "notion_url": notion_url,
+                        "html_report_url": run.get("html_report_url"),
+                        "dashboard_url": (
+                            os.getenv("RESULT_DASHBOARD_URL")
+                            or os.getenv("PUBLIC_BASE_URL")
+                            or os.getenv("RENDER_EXTERNAL_URL")
+                        ),
+                    }
+                )
+                if slack_sent:
+                    append_run_log(run, "🔔 Slack 알림 전송 완료")
+                else:
+                    append_run_log(run, "⚠️ Slack 알림 생략 또는 전송 실패")
+            else:
+                append_run_log(run, "⚠️ Notion 업로드 비활성화로 Slack 알림을 생략했습니다.")
 
         run["status"] = "failed" if execution_failed(
             run.get("scenarios", []),
