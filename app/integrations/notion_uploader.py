@@ -317,6 +317,55 @@ class NotionUploader:
         options = self._available_option_names(platform_prop, prop_type)
         return platform_name, {prop_type: {"name": self._pick_option([platform], options)}}
 
+    def _test_environment_property(self, environment: str) -> tuple[str, dict]:
+        candidates = ["테스트환경", "테스트 환경", "Test Environment", "Environment"]
+        try:
+            environment_name, environment_prop = self._property(candidates)
+        except NotionUploadError as exc:
+            if "Missing Notion property" not in exc.detail:
+                raise
+            environment_name = "테스트환경"
+            self.database_schema = self._request(
+                "PATCH",
+                f"https://api.notion.com/v1/databases/{self.database_id}",
+                json={
+                    "properties": {
+                        environment_name: {
+                            "select": {
+                                "options": [
+                                    {"name": "PROD", "color": "green"},
+                                    {"name": "Dev", "color": "blue"},
+                                ]
+                            }
+                        }
+                    }
+                },
+            )
+            environment_prop = self._get_property(environment_name)
+
+        prop_type = environment_prop.get("type")
+        if prop_type not in ("select", "status", "rich_text", "title"):
+            raise NotionUploadError(
+                "Notion DB 테스트환경 컬럼 타입이 맞지 않습니다. 테스트환경 컬럼 타입을 select 또는 rich_text로 설정하세요.",
+                f"Invalid test environment property type: {prop_type}",
+            )
+
+        if prop_type in ("rich_text", "title"):
+            return environment_name, self._text_property(environment_prop, environment)
+
+        options = self._available_option_names(environment_prop, prop_type)
+        candidates = [
+            environment,
+            environment.upper(),
+            environment.title(),
+        ]
+        if environment.lower() == "prod":
+            candidates.extend(["PROD", "Prod", "Production"])
+        elif environment.lower() == "dev":
+            candidates.extend(["Dev", "DEV", "Development"])
+
+        return environment_name, {prop_type: {"name": self._pick_option(candidates, options)}}
+
     def _rich_text(self, content: str, annotations: dict | None = None) -> dict:
         text = {"type": "text", "text": {"content": content[:2000]}}
         if annotations:
@@ -823,6 +872,7 @@ class NotionUploader:
         title: str,
         version: str,
         platform: str,
+        test_environment: str,
         pass_count: int,
         fail_count: int,
         na_count: int,
@@ -837,6 +887,7 @@ class NotionUploader:
         title = str(title)
         version = str(version)
         platform = str(platform)
+        test_environment = str(test_environment)
         status = str(status)
         result_text = str(result_text)
 
@@ -855,6 +906,7 @@ class NotionUploader:
         )
         date_name, date_prop = self._property(["등록일", "날짜", "Date"])
         platform_name, platform_property = self._platform_property(platform)
+        environment_name, environment_property = self._test_environment_property(test_environment)
         status_name, status_property = self._status_property(status)
 
         children = self._page_children(
@@ -873,6 +925,7 @@ class NotionUploader:
             title_name: self._text_property(title_prop, title),
             version_name: self._text_property(version_prop, version),
             platform_name: platform_property,
+            environment_name: environment_property,
             pass_name: self._number_property(pass_prop, pass_count),
             fail_name: self._number_property(fail_prop, fail_count),
             na_name: self._number_property(na_prop, na_count),

@@ -95,11 +95,14 @@ def upload_to_notion(run: dict):
             scenario_snapshots[scenario["name"]] = snapshots
 
     execution_status = "실패" if _execution_failed(run) else "성공"
+    target_environment = str(run.get("target_environment") or "prod").lower()
+    test_environment = "Dev" if target_environment == "dev" else "PROD"
 
     return uploader.upload_result(
         title="GO Hanpass 자동화 테스트 결과",
         version="1.0.0",
         platform="WEB_CHROME_SERVER",
+        test_environment=test_environment,
         pass_count=run["summary"]["pass"],
         fail_count=run["summary"]["fail"],
         na_count=run["summary"]["na"],
