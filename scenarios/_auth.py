@@ -1,11 +1,12 @@
 import asyncio
+import os
 
 from playwright.async_api import Page
 
 
 LOGIN_EMAIL = "hanpassqa5@gmail.com"
 LOGIN_PASSWORD = "xptmxm123!"
-BASE_URL = "https://go.hanpass.com"
+BASE_URL = os.getenv("GOHANPASS_BASE_URL", "https://go.hanpass.com").rstrip("/")
 WEB_SIGNIN_API = "https://app.hanpass.com/app/v1/member/web-signin"
 
 

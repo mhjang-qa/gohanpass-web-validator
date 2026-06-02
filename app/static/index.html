@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>GO Hanpass Web Auto Validator</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260522-scenario-colors" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260602-env-switch" />
   </head>
 
   <body>
@@ -54,6 +54,20 @@
         </div>
 
         <div class="hero-actions">
+          <fieldset class="environment-switch" aria-label="실행 환경">
+            <legend>환경</legend>
+
+            <label>
+              <input type="radio" name="targetEnvironment" value="dev" />
+              <span>Dev</span>
+            </label>
+
+            <label>
+              <input type="radio" name="targetEnvironment" value="prod" checked />
+              <span>PROD</span>
+            </label>
+          </fieldset>
+
           <div class="status">
             <span id="scheduleState">스케줄 확인중</span>
           </div>
@@ -135,6 +149,6 @@
       </section>
     </main>
 
-    <script src="/static/app.js?v=20260522-scenario-colors"></script>
+    <script src="/static/app.js?v=20260602-env-switch"></script>
   </body>
 </html>

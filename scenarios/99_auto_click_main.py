@@ -3,7 +3,7 @@ from typing import Any, Dict, List
 
 from playwright.async_api import Page
 
-from scenarios._auth import ensure_logged_in, reauthenticate_if_required
+from scenarios._auth import BASE_URL, ensure_logged_in, reauthenticate_if_required
 
 # =========================
 # LOGGER (GUI 연결용)
@@ -199,7 +199,7 @@ async def safe_back(page: Page, home_url: str):
 # =========================
 async def run(page: Page):
     result = []
-    home_url = "https://go.hanpass.com"
+    home_url = BASE_URL
 
     await step(result, "ensure_login", lambda: ensure_logged_in(page))
     await step(result, "open_url", lambda: page.goto(home_url, wait_until="commit", timeout=10000))

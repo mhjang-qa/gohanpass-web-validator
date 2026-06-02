@@ -1,7 +1,7 @@
 import asyncio
 from time import perf_counter
 
-from scenarios._auth import ensure_logged_in, has_login_required_popup, is_logged_in_home, log
+from scenarios._auth import BASE_URL, ensure_logged_in, has_login_required_popup, is_logged_in_home, log
 
 
 async def run(page):
@@ -22,8 +22,8 @@ async def run(page):
 
     async def open_url():
         await log("🌐 GO Hanpass 홈 접속 중")
-        if not page.url.startswith("https://go.hanpass.com"):
-            await page.goto("https://go.hanpass.com", wait_until="commit", timeout=10000)
+        if not page.url.startswith(BASE_URL):
+            await page.goto(BASE_URL, wait_until="commit", timeout=10000)
         settled_until = perf_counter() + 5
         while perf_counter() < settled_until:
             if await is_logged_in_home(page):

@@ -1,5 +1,6 @@
 import asyncio
 import importlib.util
+import os
 import subprocess
 import sys
 import uuid
@@ -21,6 +22,25 @@ RUN_LOCK = asyncio.Lock()
 CURRENT_RUN_ID: str | None = None
 CURRENT_RUN: dict | None = None
 RUN_TASKS: dict[str, asyncio.Task] = {}
+
+TARGET_ENVIRONMENTS = {
+    "prod": "https://go.hanpass.com",
+    "dev": "https://dev-go.hanpass.com",
+}
+
+
+def normalize_target_environment(value: str | None) -> tuple[str, str]:
+    key = str(value or "prod").strip().lower()
+    if key not in TARGET_ENVIRONMENTS:
+        key = "prod"
+    return key, TARGET_ENVIRONMENTS[key]
+
+
+def configure_scenario_base_url(base_url: str) -> None:
+    os.environ["GOHANPASS_BASE_URL"] = base_url
+    auth_module = sys.modules.get("scenarios._auth")
+    if auth_module and hasattr(auth_module, "BASE_URL"):
+        setattr(auth_module, "BASE_URL", base_url)
 
 
 def now_iso() -> str:
@@ -73,12 +93,16 @@ def create_run_record(
     source: str,
     run_id: str | None = None,
     snapshot_interval_seconds: int = 30,
+    target_environment: str = "prod",
 ) -> tuple[dict, list[Path]]:
     run_id = run_id or datetime.now(ZoneInfo(TIMEZONE)).strftime("%Y%m%d_%H%M%S")
     scenario_paths = resolve_scenario_paths(scenario_names)
+    environment, base_url = normalize_target_environment(target_environment)
     run = {
         "id": run_id,
         "source": source,
+        "target_environment": environment,
+        "target_base_url": base_url,
         "requested_scenarios": scenario_names,
         "status": "running",
         "started_at": now_iso(),
@@ -196,6 +220,14 @@ async def execute_run(run: dict, scenario_paths: list[Path], notion_upload: bool
     snapshot_stop = asyncio.Event()
     snapshot_task: asyncio.Task | None = None
     try:
+        target_environment, target_base_url = normalize_target_environment(
+            run.get("target_environment")
+        )
+        run["target_environment"] = target_environment
+        run["target_base_url"] = target_base_url
+        configure_scenario_base_url(target_base_url)
+        append_run_log(run, f"🌐 실행 환경: {target_environment.upper()} ({target_base_url})")
+
         scenario_count = max(1, len(scenario_paths))
         update_run_progress(run, 5, "실행 환경 준비 중", 0)
         append_run_log(run, "⏳ 실행 환경 준비 중")
@@ -209,6 +241,7 @@ async def execute_run(run: dict, scenario_paths: list[Path], notion_upload: bool
             run["current_scenario_name"] = path.name
             save_run(run)
             try:
+                configure_scenario_base_url(target_base_url)
                 module = import_scenario(path)
                 if hasattr(module, "log"):
                     module.log.logger = lambda message: append_run_log(run, message)
@@ -225,7 +258,10 @@ async def execute_run(run: dict, scenario_paths: list[Path], notion_upload: bool
                     if page is None:
                         update_run_progress(run, scenario_start_percent + 5, "브라우저 실행 및 모바일 컨텍스트 준비 중", idx)
                         append_run_log(run, "🌐 브라우저 실행 및 모바일 컨텍스트 준비 중")
-                        playwright, browser, context, page = await create_page()
+                        playwright, browser, context, page = await create_page(
+                            target_environment=target_environment,
+                            target_base_url=target_base_url,
+                        )
                         bind_scenario_snapshot(run, page)
                         snapshot_task = asyncio.create_task(snapshot_loop(run, page, snapshot_stop))
                         append_run_log(run, "🌐 브라우저 준비 완료")
@@ -312,6 +348,7 @@ async def run_scenarios(
     source: str = "manual",
     run_id: str | None = None,
     snapshot_interval_seconds: int = 30,
+    target_environment: str = "prod",
 ) -> dict:
     if RUN_LOCK.locked() or any(not task.done() for task in RUN_TASKS.values()):
         raise RuntimeError("이미 실행 중인 작업이 있습니다.")
@@ -322,6 +359,7 @@ async def run_scenarios(
             source,
             run_id=run_id,
             snapshot_interval_seconds=snapshot_interval_seconds,
+            target_environment=target_environment,
         )
         return await execute_run(run, scenario_paths, notion_upload=notion_upload)
 
@@ -332,6 +370,7 @@ def start_run_scenarios(
     source: str = "manual",
     run_id: str | None = None,
     snapshot_interval_seconds: int = 30,
+    target_environment: str = "prod",
 ) -> dict:
     if RUN_LOCK.locked() or any(not task.done() for task in RUN_TASKS.values()):
         raise RuntimeError("이미 실행 중인 작업이 있습니다.")
@@ -341,6 +380,7 @@ def start_run_scenarios(
         source,
         run_id=run_id,
         snapshot_interval_seconds=snapshot_interval_seconds,
+        target_environment=target_environment,
     )
     task = asyncio.create_task(
         run_scenarios_background(
@@ -359,7 +399,7 @@ async def run_scenarios_background(run: dict, scenario_paths: list[Path], notion
         return await execute_run(run, scenario_paths, notion_upload=notion_upload)
 
 
-async def create_page():
+async def create_page(target_environment: str = "prod", target_base_url: str | None = None):
     playwright = await async_playwright().start()
     launch_options = {
         "headless": HEADLESS,
@@ -412,7 +452,10 @@ async def create_page():
                 "Playwright 브라우저 자동 복구에 실패했습니다. Render 빌드 명령과 네트워크 상태를 확인하세요."
             ) from install_exc
 
-    auth_state_path = DATA_DIR / "web_auth_state.json"
+    environment, base_url = normalize_target_environment(target_environment)
+    if target_base_url:
+        base_url = target_base_url.rstrip("/")
+    auth_state_path = DATA_DIR / f"web_auth_state_{environment}.json"
     context_options = {
         "viewport": {"width": 500, "height": 812},
         "screen": {"width": 500, "height": 812},
@@ -434,11 +477,13 @@ async def create_page():
         context_options["storage_state"] = str(auth_state_path)
 
     context = await browser.new_context(**context_options)
-    await context.grant_permissions(["geolocation"], origin="https://go.hanpass.com")
+    await context.grant_permissions(["geolocation"], origin=base_url)
     page = await context.new_page()
     page.set_default_timeout(2500)
     page.set_default_navigation_timeout(10000)
     setattr(page, "gohanpass_auth_state_path", str(auth_state_path))
+    setattr(page, "gohanpass_target_environment", environment)
+    setattr(page, "gohanpass_target_base_url", base_url)
     return playwright, browser, context, page
 
 

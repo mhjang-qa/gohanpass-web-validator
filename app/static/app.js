@@ -19,6 +19,23 @@ const state = {
 const AUTH_KEY = "gohanpass_web_validator_auth";
 const RUN_STATE_KEY = "gohanpass_web_validator_run_state";
 
+function selectedEnvironment() {
+  return (
+    document.querySelector("input[name='targetEnvironment']:checked")?.value ||
+    "prod"
+  );
+}
+
+function setEnvironment(value = "prod") {
+  const normalized = value === "dev" ? "dev" : "prod";
+  const input = document.querySelector(
+    `input[name='targetEnvironment'][value='${normalized}']`
+  );
+  if (input) {
+    input.checked = true;
+  }
+}
+
 function isAuthenticated() {
   return window.sessionStorage.getItem(AUTH_KEY) === "qa";
 }
@@ -237,6 +254,8 @@ function renderDays(selected = []) {
 }
 
 function applyScheduleToForm(schedule) {
+  setEnvironment(schedule.target_environment || "prod");
+
   document.querySelector("#scheduleEnabled").checked =
     Boolean(schedule.enabled);
 
@@ -545,6 +564,7 @@ async function runNow() {
       method: "POST",
       body: JSON.stringify({
         scenarios: selectedScenarios(),
+        target_environment: selectedEnvironment(),
         notion_upload:
           document.querySelector("#notionUpload").checked,
         snapshot_interval_seconds: Number(
@@ -584,6 +604,7 @@ async function saveSchedule() {
     days,
 
     scenarios: selectedScenarios(),
+    target_environment: selectedEnvironment(),
 
     notion_upload:
       document.querySelector("#notionUpload").checked,
@@ -658,6 +679,19 @@ document
 document
   .querySelector("#scheduleEnabled")
   .addEventListener("change", syncScheduleDetailsVisibility);
+
+document
+  .querySelectorAll("input[name='targetEnvironment']")
+  .forEach((input) => {
+    input.addEventListener("change", () => {
+      if (state.schedule) {
+        state.schedule = {
+          ...state.schedule,
+          target_environment: selectedEnvironment(),
+        };
+      }
+    });
+  });
 
 document
   .querySelector("#refreshBtn")

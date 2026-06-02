@@ -6,6 +6,15 @@ from app.config import DATA_DIR, RUNS_DIR
 
 
 SCHEDULE_FILE = DATA_DIR / "schedule.json"
+DEFAULT_SCHEDULE = {
+    "enabled": False,
+    "time": "09:00",
+    "days": ["mon", "tue", "wed", "thu", "fri"],
+    "scenarios": [],
+    "notion_upload": True,
+    "snapshot_interval_seconds": 30,
+    "target_environment": "prod",
+}
 
 
 def read_json(path: Path, default: Any):
@@ -23,17 +32,10 @@ def write_json(path: Path, data: Any):
 
 
 def load_schedule() -> dict:
-    return read_json(
-        SCHEDULE_FILE,
-        {
-            "enabled": False,
-            "time": "09:00",
-            "days": ["mon", "tue", "wed", "thu", "fri"],
-            "scenarios": [],
-            "notion_upload": True,
-            "snapshot_interval_seconds": 30,
-        },
-    )
+    saved = read_json(SCHEDULE_FILE, {})
+    if not isinstance(saved, dict):
+        saved = {}
+    return {**DEFAULT_SCHEDULE, **saved}
 
 
 def save_schedule(schedule: dict):

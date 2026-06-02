@@ -2,10 +2,10 @@ import asyncio
 import re
 from playwright.async_api import Page
 
-from scenarios._auth import ensure_logged_in, is_logged_in_home, log, reauthenticate_if_required
+from scenarios._auth import BASE_URL, ensure_logged_in, is_logged_in_home, log, reauthenticate_if_required
 
 
-HOME_URL = "https://go.hanpass.com"
+HOME_URL = BASE_URL
 
 async def run(page):
     result = []

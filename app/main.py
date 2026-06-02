@@ -23,6 +23,7 @@ class RunRequest(BaseModel):
     scenarios: list[str]
     notion_upload: bool = True
     snapshot_interval_seconds: int = 30
+    target_environment: str = "prod"
 
 
 class ScheduleRequest(BaseModel):
@@ -32,6 +33,7 @@ class ScheduleRequest(BaseModel):
     scenarios: list[str]
     notion_upload: bool = True
     snapshot_interval_seconds: int = 30
+    target_environment: str = "prod"
 
 
 @app.get("/api/current-run")
@@ -93,6 +95,7 @@ async def api_start_run(request: RunRequest):
             notion_upload=request.notion_upload,
             source="manual",
             snapshot_interval_seconds=request.snapshot_interval_seconds,
+            target_environment=request.target_environment,
         )
         return run
     except RuntimeError as exc:

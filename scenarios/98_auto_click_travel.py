@@ -3,7 +3,7 @@ from typing import List, Tuple
 
 from playwright.async_api import Page
 
-from scenarios._auth import ensure_logged_in, reauthenticate_if_required
+from scenarios._auth import BASE_URL, ensure_logged_in, reauthenticate_if_required
 
 
 async def log(message: str):
@@ -55,7 +55,7 @@ async def assert_authenticated(page: Page):
 
 
 async def is_home_ready(page: Page) -> bool:
-    if "go.hanpass.com" not in page.url:
+    if not page.url.startswith(BASE_URL):
         return False
 
     selectors = [
@@ -217,7 +217,7 @@ TRAVEL_TARGETS: List[Tuple[str, List[str]]] = [
 
 async def run(page: Page):
     result = []
-    home_url = "https://go.hanpass.com"
+    home_url = BASE_URL
 
     await step(result, "ensure_login", lambda: ensure_logged_in(page))
     await step(result, "open_home", lambda: goto_home(page, home_url))

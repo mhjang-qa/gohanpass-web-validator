@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 from playwright.async_api import Page
 
 from scenarios._auth import (
+    BASE_URL,
     ensure_logged_in,
     has_login_required_popup,
     is_logged_in_home as authenticated_home,
@@ -12,7 +13,7 @@ from scenarios._auth import (
 )
 
 
-HOME_URL = "https://go.hanpass.com"
+HOME_URL = BASE_URL
 MAX_MENU_ITEMS = 80
 
 SKIP_KEYWORDS = {
@@ -76,7 +77,7 @@ async def is_logged_in_home(page: Page) -> bool:
 
 
 async def goto_home(page: Page, force_reload: bool = False):
-    if not force_reload and "go.hanpass.com" in page.url and await is_logged_in_home(page):
+    if not force_reload and page.url.startswith(HOME_URL) and await is_logged_in_home(page):
         return
 
     await page.goto(HOME_URL, wait_until="commit", timeout=10000)
@@ -370,7 +371,7 @@ async def recover_home(page: Page):
     except Exception:
         pass
 
-    if "go.hanpass.com" not in page.url:
+    if not page.url.startswith(HOME_URL):
         await goto_home(page)
 
 

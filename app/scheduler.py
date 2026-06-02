@@ -31,6 +31,7 @@ async def scheduled_run():
         notion_upload=schedule.get("notion_upload", True),
         source="schedule",
         snapshot_interval_seconds=schedule.get("snapshot_interval_seconds", 30),
+        target_environment=schedule.get("target_environment", "prod"),
     )
 
 
