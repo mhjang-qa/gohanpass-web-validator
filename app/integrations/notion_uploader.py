@@ -475,6 +475,10 @@ class NotionUploader:
 
         if fail_count == 0 and error_count == 0:
             outcome = "전체 테스트가 실패 없이 완료되었습니다."
+        elif status in ("성공", "완료"):
+            sample = ", ".join(failed_tests[:3])
+            suffix = " 등" if len(failed_tests) > 3 else ""
+            outcome = f"기능 검증 FAIL 항목은 {sample}{suffix}입니다." if sample else "기능 검증 FAIL 항목을 상세 표에서 확인하세요."
         else:
             sample = ", ".join(failed_tests[:3])
             suffix = " 등" if len(failed_tests) > 3 else ""
@@ -845,6 +849,7 @@ class NotionUploader:
         total_name, total_prop = self._property(["Total", "TOTAL"])
         result_name, result_prop = self._property(["결과", "Result"])
         execution_failed = self._execution_failed(scenario_results, error_count)
+        status = "실패" if execution_failed else "성공"
         test_result_name, test_result_property = self._test_result_property(
             "테스트 실패" if execution_failed else "테스트 성공"
         )
