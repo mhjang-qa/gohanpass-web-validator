@@ -97,7 +97,7 @@ def upload_to_notion(run: dict):
     execution_status = "실패" if _execution_failed(run) else "성공"
 
     return uploader.upload_result(
-        title=f"GO Hanpass 웹 자동리포트_{run['started_at'].replace(':', '').replace('-', '')[:15]}",
+        title="GO Hanpass 자동화 테스트 결과",
         version="1.0.0",
         platform="WEB_CHROME_SERVER",
         pass_count=run["summary"]["pass"],
