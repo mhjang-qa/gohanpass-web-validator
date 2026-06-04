@@ -8,6 +8,7 @@ LOGIN_EMAIL = "hanpassqa5@gmail.com"
 LOGIN_PASSWORD = "xptmxm123!"
 BASE_URL = os.getenv("GOHANPASS_BASE_URL", "https://go.hanpass.com").rstrip("/")
 WEB_SIGNIN_API = "https://app.hanpass.com/app/v1/member/web-signin"
+LOGIN_RESPONSE_KEYWORDS = ("web-signin", "signin", "sign-in", "login")
 
 
 async def log(message: str):
@@ -153,6 +154,69 @@ async def wait_for_home_or_login(page: Page, timeout_seconds: float = 5):
         except Exception:
             pass
         await asyncio.sleep(0.2)
+
+
+async def click_login_surface_if_visible(page: Page) -> bool:
+    selectors = [
+        'button:has(img[alt="my_page"])',
+        'div.fixed.bottom-0 button:has(img[alt="my_page"])',
+        'button:has(img[src*="my"])',
+        'button:has(img[src*="user"])',
+        'button:has-text("MY")',
+        'button:has-text("마이")',
+    ]
+    for selector in selectors:
+        try:
+            target = page.locator(selector).last
+            if await target.count() == 0 or not await target.is_visible():
+                continue
+            try:
+                await target.click(timeout=2500)
+            except Exception:
+                await target.evaluate(
+                    """node => {
+                        const button = node.closest("button") || node;
+                        button.click();
+                    }"""
+                )
+            await short_pause(0.5)
+            if await login_email_visible(page) or await login_entry_visible(page):
+                return True
+        except Exception:
+            pass
+
+    try:
+        return await page.evaluate(
+            """() => {
+                const visible = (el) => {
+                    if (!el) return false;
+                    const style = window.getComputedStyle(el);
+                    const rect = el.getBoundingClientRect();
+                    return style.visibility !== "hidden"
+                        && style.display !== "none"
+                        && rect.width > 0
+                        && rect.height > 0
+                        && rect.bottom > 0
+                        && rect.top < window.innerHeight;
+                };
+                const candidates = Array.from(document.querySelectorAll("button, a, [role='button']"))
+                    .filter(visible)
+                    .filter((node) => {
+                        const text = `${node.innerText || ""} ${node.textContent || ""} ${node.getAttribute("aria-label") || ""}`;
+                        const img = node.querySelector("img");
+                        const alt = img ? img.getAttribute("alt") || "" : "";
+                        const src = img ? img.getAttribute("src") || "" : "";
+                        return /로그인|MY|마이|my_page/i.test(`${text} ${alt} ${src}`);
+                    });
+                const target = candidates.find((node) => /로그인/.test(node.innerText || node.textContent || ""))
+                    || candidates[0];
+                if (!target) return false;
+                target.click();
+                return true;
+            }"""
+        )
+    except Exception:
+        return False
 
 
 async def go_home_and_wait(page: Page, timeout_seconds: float = 5):
@@ -360,6 +424,60 @@ async def enter_password_by_keypad(page: Page, password: str):
             pass
 
 
+async def close_secure_keypad(page: Page):
+    for command in ("enter", "close"):
+        try:
+            await click_keypad_command(page, command)
+            await short_pause(0.25)
+            return
+        except Exception:
+            pass
+
+    try:
+        clicked = await page.evaluate(
+            """() => {
+                const visible = (el) => {
+                    if (!el) return false;
+                    const style = window.getComputedStyle(el);
+                    const rect = el.getBoundingClientRect();
+                    return style.visibility !== "hidden"
+                        && style.display !== "none"
+                        && rect.width > 0
+                        && rect.height > 0
+                        && rect.bottom > 0
+                        && rect.top < window.innerHeight;
+                };
+                const candidates = Array.from(document.querySelectorAll("button, [role='button'], div, span"))
+                    .filter(visible)
+                    .filter((node) => {
+                        const text = `${node.innerText || ""} ${node.textContent || ""} ${node.getAttribute("aria-label") || ""}`;
+                        const id = node.getAttribute("id") || "";
+                        const cls = node.getAttribute("class") || "";
+                        return /입력완료|키패드닫기|닫기/.test(text)
+                            || id === "nfilter_enter"
+                            || id === "nfilter_close"
+                            || cls.includes("enter");
+                    });
+                const target = candidates.find((node) => /입력완료|완료/.test(node.innerText || node.textContent || ""))
+                    || candidates[0];
+                if (!target) return false;
+                target.click();
+                return true;
+            }"""
+        )
+        if clicked:
+            await short_pause(0.25)
+    except Exception:
+        pass
+
+
+def is_login_response(response) -> bool:
+    url = response.url.lower()
+    if WEB_SIGNIN_API.lower() in url:
+        return True
+    return "member" in url and any(keyword in url for keyword in LOGIN_RESPONSE_KEYWORDS)
+
+
 async def open_login_form(page: Page):
     async def login_form_visible() -> bool:
         try:
@@ -385,6 +503,13 @@ async def open_login_form(page: Page):
         if await login_entry_visible(page):
             break
         await asyncio.sleep(0.2)
+
+    if not await login_entry_visible(page):
+        await click_login_surface_if_visible(page)
+        if await wait_for_login_form(timeout_ms=1500):
+            return
+        if await login_entry_visible(page):
+            await short_pause()
 
     async def click_login_entry_from_dom() -> bool:
         return await page.evaluate(
@@ -548,6 +673,166 @@ async def open_login_form(page: Page):
     raise RuntimeError(f"로그인 진입 버튼을 찾지 못했습니다: {last_error}")
 
 
+async def click_visible_login_submit(page: Page) -> dict:
+    selectors = [
+        page.get_by_role("button", name="로그인", exact=True),
+        page.locator("button.bg-primary.text-white.w-full:has-text('로그인')"),
+        page.locator("section button:has-text('로그인')"),
+        page.locator("form button[type='submit']"),
+        page.locator("button:has-text('로그인')"),
+        page.get_by_role("button", name="확인", exact=True),
+        page.locator("button:has-text('확인')"),
+    ]
+
+    last_error = None
+    for locator in selectors:
+        try:
+            count = await locator.count()
+            for idx in range(count):
+                target = locator.nth(idx)
+                if not await target.is_visible():
+                    continue
+                class_name = await target.get_attribute("class") or ""
+                target_id = await target.get_attribute("id") or ""
+                if "ir_pm" in class_name or target_id.startswith("nfilter_"):
+                    continue
+                try:
+                    if not await target.is_enabled():
+                        continue
+                except Exception:
+                    pass
+                try:
+                    await target.click(timeout=3000)
+                except Exception:
+                    await target.evaluate("el => el.click()")
+                return {"clicked": True, "method": "locator"}
+        except Exception as e:
+            last_error = e
+
+    try:
+        click_target = await page.evaluate(
+            """() => {
+                const visible = (el) => {
+                    if (!el) return false;
+                    const style = window.getComputedStyle(el);
+                    const rect = el.getBoundingClientRect();
+                    return style.visibility !== "hidden"
+                        && style.display !== "none"
+                        && rect.width > 0
+                        && rect.height > 0
+                        && rect.bottom > 0
+                        && rect.top < window.innerHeight
+                        && !el.disabled
+                        && !el.closest("[aria-hidden='true']");
+                };
+                const candidates = Array.from(document.querySelectorAll("button, [role='button'], input[type='submit'], div, span"))
+                    .map((node) => {
+                        const rect = node.getBoundingClientRect();
+                        const text = `${node.innerText || ""} ${node.textContent || ""} ${node.value || ""} ${node.getAttribute("aria-label") || ""}`;
+                        const id = node.getAttribute("id") || "";
+                        const cls = node.getAttribute("class") || "";
+                        return { node, rect, text, id, cls };
+                    })
+                    .filter(({ node, rect, text, id, cls }) => {
+                        if (!visible(node)) return false;
+                        if (id.startsWith("nfilter_") || cls.includes("ir_pm")) return false;
+                        if (rect.top > window.innerHeight * 0.58) return false;
+                        return /로그인|확인|완료/.test(text) || node.type === "submit";
+                    });
+                const preferred = candidates.find(({ text, rect }) => /로그인/.test(text) && rect.width > 120)
+                    || candidates.find(({ text, rect }) => /확인|완료/.test(text) && rect.width > 120)
+                    || candidates.find(({ rect }) => rect.width > 120)
+                    || candidates[0];
+                if (!preferred) return null;
+
+                const clickable = preferred.node.closest("button, a, [role='button'], [onclick], [class*='cursor-pointer']")
+                    || preferred.node;
+                clickable.click();
+                const rect = clickable.getBoundingClientRect();
+                return {
+                    x: rect.left + rect.width / 2,
+                    y: rect.top + rect.height / 2,
+                    text: (clickable.innerText || clickable.textContent || "").trim().slice(0, 40),
+                };
+            }"""
+        )
+        if click_target:
+            try:
+                await page.mouse.click(click_target["x"], click_target["y"])
+            except Exception:
+                pass
+            return {"clicked": True, "method": "dom"}
+    except Exception as e:
+        last_error = e
+
+    raise RuntimeError(f"로그인 제출 버튼을 찾지 못했습니다: {last_error}")
+
+
+async def click_login_submit_by_position(page: Page) -> dict:
+    target = await page.evaluate(
+        """() => {
+            const visible = (el) => {
+                if (!el) return false;
+                const style = window.getComputedStyle(el);
+                const rect = el.getBoundingClientRect();
+                return style.visibility !== "hidden"
+                    && style.display !== "none"
+                    && rect.width > 0
+                    && rect.height > 0
+                    && rect.top >= 0
+                    && rect.bottom <= window.innerHeight;
+            };
+            const candidates = Array.from(document.querySelectorAll("button, [role='button'], div, span"))
+                .map((node) => ({ node, rect: node.getBoundingClientRect(), text: `${node.innerText || ""} ${node.textContent || ""}` }))
+                .filter(({ node, rect, text }) => visible(node)
+                    && /확인|로그인|완료/.test(text)
+                    && rect.width > 120
+                    && rect.top < window.innerHeight * 0.6);
+            const best = candidates.sort((a, b) => b.rect.width - a.rect.width)[0];
+            if (!best) return null;
+            return {
+                x: best.rect.left + best.rect.width / 2,
+                y: best.rect.top + best.rect.height / 2,
+                text: best.text.trim().slice(0, 40),
+            };
+        }"""
+    )
+    if target:
+        await page.mouse.click(target["x"], target["y"])
+        return {"clicked": True, "method": "position", "text": target.get("text")}
+
+    await page.mouse.click(250, 418)
+    return {"clicked": True, "method": "position-default"}
+
+
+async def press_login_submit_key(page: Page) -> dict:
+    await page.keyboard.press("Enter")
+    return {"clicked": True, "method": "keyboard-enter"}
+
+
+async def click_login_submit_and_capture_response(page: Page):
+    last_error = None
+    strategies = [
+        click_visible_login_submit,
+        click_login_submit_by_position,
+        press_login_submit_key,
+        click_visible_login_submit,
+    ]
+    for attempt, strategy in enumerate(strategies):
+        try:
+            async with page.expect_response(is_login_response, timeout=6000) as response_info:
+                info = await strategy(page)
+                await log(f"🔐 로그인 제출 시도: {info.get('method')}")
+            return await response_info.value
+        except Exception as e:
+            last_error = e
+            if await is_logged_in_home(page):
+                return None
+            await close_secure_keypad(page)
+            await short_pause(0.35 + attempt * 0.15)
+    raise RuntimeError(str(last_error))
+
+
 async def open_password_form(page: Page):
     password_input = page.get_by_placeholder("비밀번호").first
     try:
@@ -609,30 +894,12 @@ async def perform_login(page: Page):
     await log("🔐 로그인 비밀번호 입력 완료")
     await capture_checkpoint(page, "login_password_entered")
 
-    confirm_candidates = [
-        page.get_by_role("button", name="확인", exact=True),
-        page.locator("button:has-text('확인')").first,
-        page.get_by_role("button", name="로그인", exact=True),
-        page.locator("button.bg-primary.text-white.w-full:has-text('로그인')"),
-        page.locator("section button:has-text('로그인')").first,
-    ]
     last_error = None
-    for confirm_btn in confirm_candidates:
+    for _ in range(2):
         try:
-            if await confirm_btn.count() == 0:
-                continue
-            await confirm_btn.wait_for(state="visible", timeout=1000)
-            try:
-                if not await confirm_btn.is_enabled():
-                    continue
-            except Exception:
-                pass
-            async with page.expect_response(
-                lambda response: WEB_SIGNIN_API in response.url,
-                timeout=8000,
-            ) as response_info:
-                await confirm_btn.click(timeout=2500)
-            response = await response_info.value
+            response = await click_login_submit_and_capture_response(page)
+            if response is None:
+                return
             response_data = None
             try:
                 setattr(page, "gohanpass_web_signin_status", response.status)
@@ -659,6 +926,9 @@ async def perform_login(page: Page):
             return
         except Exception as e:
             last_error = e
+            if await is_logged_in_home(page):
+                return
+            await short_pause(0.4)
 
     raise RuntimeError(f"로그인 버튼 클릭 실패: {last_error}")
 
@@ -703,6 +973,8 @@ async def ensure_logged_in(page: Page):
             await log("🔐 로그인 세션 재사용 완료")
             await save_auth_state(page)
             return
+        await clear_saved_auth_session(page)
+        await log("🔐 저장된 로그인 세션 무효 - 신규 로그인 진행")
 
     await log("🔐 로그인 상태 없음 - 자동 로그인 시작")
     await perform_login(page)
