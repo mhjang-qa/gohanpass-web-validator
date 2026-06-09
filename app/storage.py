@@ -28,7 +28,10 @@ def read_json(path: Path, default: Any):
 
 def write_json(path: Path, data: Any):
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    payload = json.dumps(data, ensure_ascii=False, indent=2)
+    tmp_path = path.with_name(f".{path.name}.tmp")
+    tmp_path.write_text(payload, encoding="utf-8")
+    tmp_path.replace(path)
 
 
 def load_schedule() -> dict:

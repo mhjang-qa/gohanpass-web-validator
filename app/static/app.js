@@ -72,6 +72,16 @@ async function api(path, options = {}) {
   return response.json();
 }
 
+async function fetchRunById(runId) {
+  if (!runId) return null;
+
+  try {
+    return await api(`/api/runs/${encodeURIComponent(runId)}`);
+  } catch (error) {
+    return null;
+  }
+}
+
 function selectedScenarios() {
   return Array.from(
     document.querySelectorAll("[data-scenario]:checked")
@@ -390,28 +400,17 @@ function markActiveRunMissingFromServer() {
     return;
   }
 
-  const summary = {
-    total: state.activeRun.summary?.total || 0,
-    pass: state.activeRun.summary?.pass || 0,
-    fail: state.activeRun.summary?.fail || 0,
-    na: state.activeRun.summary?.na || 0,
-    error: Math.max(1, Number(state.activeRun.summary?.error || 0)),
-  };
+  const logs = state.activeRun.logs || [];
+  const message =
+    "⚠️ 실행 상태가 목록 응답에서 잠시 누락되어 개별 상태를 재확인 중입니다.";
 
   state.activeRun = {
     ...state.activeRun,
-    status: "failed",
-    summary,
-    finished_at: new Date().toISOString(),
     progress: {
       ...(state.activeRun.progress || {}),
-      percent: 100,
-      label: "서버 재시작 또는 실행 중단 감지",
+      label: "실행 상태 재확인 중",
     },
-    logs: [
-      ...(state.activeRun.logs || []),
-      "⚠️ 서버 재시작 또는 실행 프로세스 중단으로 실행 상태를 더 이상 확인할 수 없습니다.",
-    ],
+    logs: logs.includes(message) ? logs : [...logs, message],
   };
 }
 
@@ -441,13 +440,23 @@ async function refreshRunsOnly() {
   }
 
   const runData = await api("/api/runs");
-  const serverRuns = runData.runs || [];
-  const activeMissing =
+  let serverRuns = runData.runs || [];
+  let activeMissing =
     state.activeRun?.status === "running" &&
     !serverRuns.some((run) => run.id === state.activeRun.id);
 
   if (activeMissing) {
-    markActiveRunMissingFromServer();
+    const recoveredRun = await fetchRunById(state.activeRun.id);
+    if (recoveredRun?.id) {
+      serverRuns = [
+        recoveredRun,
+        ...serverRuns.filter((run) => run.id !== recoveredRun.id),
+      ];
+      state.activeRun = {...recoveredRun, _serverMisses: 0};
+      activeMissing = false;
+    } else {
+      markActiveRunMissingFromServer();
+    }
   }
 
   const runs = mergeRuns(serverRuns);
