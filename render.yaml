@@ -13,6 +13,20 @@ services:
         sync: false
       - key: NOTION_DB_ID
         value: 5ad73fbd195182bcb4b201fb9d76815f
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: VALIDATOR_USER
+        value: qa
+      - key: VALIDATOR_PASSWORD
+        sync: false
+      - key: QA_CONSOLE_SHARED_SECRET
+        sync: false
+      - key: QA_CONSOLE_ALLOWED_ORIGIN
+        value: https://gohanpass-qa-console.onrender.com
+      - key: AUTH_COOKIE_SECURE
+        value: "true"
+      - key: AUTH_COOKIE_SAMESITE
+        value: none
       - key: HEADLESS
         value: "true"
       - key: NOTION_UPLOAD

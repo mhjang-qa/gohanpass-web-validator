@@ -1,15 +1,32 @@
 import asyncio
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from app.auth import (
+    AUTH_COOKIE,
+    clear_auth_cookie,
+    create_manual_session,
+    issue_auth_cookie,
+    read_auth_session,
+    verify_manual_credentials,
+)
 from app.config import BASE_DIR, OUTPUT_DIR
 import app.runner as runner
 from app.scenarios import list_scenarios
 from app.scheduler import apply_schedule, start_scheduler, stop_scheduler
+from app.sso import (
+    QA_CONSOLE_ALLOWED_ORIGIN,
+    build_console_session,
+    is_allowed_console_referer,
+    launch_failure_html,
+    launch_success_html,
+    logout_cleanup_html,
+    validate_sso_token,
+)
 from app.storage import list_runs, load_run, load_schedule, mark_running_runs_interrupted
 
 
@@ -34,6 +51,11 @@ class ScheduleRequest(BaseModel):
     notion_upload: bool = True
     snapshot_interval_seconds: int = 30
     target_environment: str = "prod"
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
 
 @app.get("/api/current-run")
@@ -61,6 +83,63 @@ async def index():
         STATIC_DIR / "index.html",
         headers={"Cache-Control": "no-store"},
     )
+
+
+@app.get("/api/auth/bootstrap")
+async def api_auth_bootstrap(request: Request):
+    session, reason = read_auth_session(request.cookies.get(AUTH_COOKIE))
+    payload = {
+        "allowedOrigin": QA_CONSOLE_ALLOWED_ORIGIN,
+        "authenticated": bool(session),
+        "session": session,
+        "reason": reason,
+    }
+    if not reason:
+        return payload
+
+    response = JSONResponse(payload)
+    clear_auth_cookie(response)
+    return response
+
+
+@app.post("/api/auth/login")
+async def api_auth_login(request: LoginRequest):
+    if not verify_manual_credentials(request.username, request.password):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials")
+
+    session = create_manual_session(request.username)
+    response = JSONResponse({"authenticated": True, "session": session})
+    issue_auth_cookie(response, session)
+    return response
+
+
+@app.post("/api/auth/logout")
+async def api_auth_logout():
+    response = JSONResponse({"ok": True})
+    clear_auth_cookie(response)
+    return response
+
+
+@app.get("/sso/launch", response_class=HTMLResponse)
+async def sso_launch(request: Request, qa_console_token: str = ""):
+    payload, reason = validate_sso_token(qa_console_token)
+    if not payload or not is_allowed_console_referer(request.headers.get("referer")):
+        failure = launch_failure_html(reason or "forbidden")
+        response = HTMLResponse(failure, status_code=status.HTTP_401_UNAUTHORIZED)
+        clear_auth_cookie(response)
+        return response
+
+    session = build_console_session(payload)
+    response = HTMLResponse(launch_success_html(session))
+    issue_auth_cookie(response, session)
+    return response
+
+
+@app.get("/sso/logout", response_class=HTMLResponse)
+async def sso_logout():
+    response = HTMLResponse(logout_cleanup_html())
+    clear_auth_cookie(response)
+    return response
 
 
 @app.get("/api/scenarios")

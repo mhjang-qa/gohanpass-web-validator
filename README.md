@@ -4,6 +4,8 @@
 
 서버나 클라우드에 배포하면 로컬 PC가 꺼져 있어도 스케줄에 따라 GO Hanpass 웹 시나리오를 실행하고, 실행 결과와 스냅샷을 Notion 리포트로 남깁니다.
 
+직접 URL로 접속하면 기존 로그인 화면이 유지되며, `GO Hanpass QA Console`에서 signed launch URL로 진입한 경우에만 로그인 화면을 건너뜁니다.
+
 ## 주요 기능
 
 - 웹 콘솔에서 시나리오 선택 후 즉시 실행
@@ -49,6 +51,13 @@ HEADLESS=true
 NOTION_UPLOAD=true
 TIMEZONE=Asia/Seoul
 SLACK_WEBHOOK_URL=
+SESSION_SECRET=<validator session secret>
+VALIDATOR_USER=qa
+VALIDATOR_PASSWORD=qa
+QA_CONSOLE_SHARED_SECRET=<console-child 공통 랜덤 문자열>
+QA_CONSOLE_ALLOWED_ORIGIN=https://gohanpass-qa-console.onrender.com
+AUTH_COOKIE_SECURE=true
+AUTH_COOKIE_SAMESITE=none
 ```
 
 선택:
@@ -134,6 +143,9 @@ API 검증 시나리오:
 - 실행 중인 run은 `running` 상태와 강조 테두리로 표시됩니다.
 - 스냅샷 간격은 즉시 실행/스케줄 실행에서 각각 설정할 수 있습니다.
 - 의미 없는 회색 화면 스냅샷은 저장하지 않고 기존 유효 스냅샷을 유지합니다.
+- 직접 URL 진입 시에는 수동 로그인 화면이 표시됩니다.
+- QA Console에서 `/sso/launch`로 진입한 경우에만 토큰 검증 후 자동 로그인 상태가 저장됩니다.
+- QA Console 로그아웃 시 `/sso/logout`이 호출되어 저장된 인증 상태와 iframe/window context가 함께 초기화됩니다.
 
 ## Notion 리포트
 
@@ -189,6 +201,13 @@ Render 환경변수:
 ```env
 NOTION_TOKEN=...
 NOTION_DB_ID=5ad73fbd195182bcb4b201fb9d76815f
+SESSION_SECRET=<validator session secret>
+VALIDATOR_USER=qa
+VALIDATOR_PASSWORD=<운영 비밀번호>
+QA_CONSOLE_SHARED_SECRET=<console-child 공통 랜덤 문자열>
+QA_CONSOLE_ALLOWED_ORIGIN=https://gohanpass-qa-console.onrender.com
+AUTH_COOKIE_SECURE=true
+AUTH_COOKIE_SAMESITE=none
 HEADLESS=true
 NOTION_UPLOAD=true
 TIMEZONE=Asia/Seoul

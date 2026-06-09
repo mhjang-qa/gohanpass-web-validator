@@ -14,10 +14,13 @@ const state = {
   refreshTimer: null,
   activeRun: null,
   lastRuns: [],
+  auth: null,
+  allowedOrigin: "",
 };
 
 const AUTH_KEY = "gohanpass_web_validator_auth";
 const RUN_STATE_KEY = "gohanpass_web_validator_run_state";
+const CONSOLE_WINDOW_NAME = "qa-console-sso";
 
 function selectedEnvironment() {
   return (
@@ -36,8 +39,78 @@ function setEnvironment(value = "prod") {
   }
 }
 
+function nowSeconds() {
+  return Math.floor(Date.now() / 1000);
+}
+
+function readCachedAuth() {
+  const stored =
+    window.localStorage.getItem(AUTH_KEY) ||
+    window.sessionStorage.getItem(AUTH_KEY);
+
+  if (!stored) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(stored);
+    if (!parsed?.exp || Number(parsed.exp) <= nowSeconds()) {
+      clearCachedAuth();
+      return null;
+    }
+    return parsed;
+  } catch (_error) {
+    clearCachedAuth();
+    return null;
+  }
+}
+
+function persistAuth(session) {
+  state.auth = session;
+  const value = JSON.stringify(session);
+  window.localStorage.setItem(AUTH_KEY, value);
+  window.sessionStorage.setItem(AUTH_KEY, value);
+}
+
+function clearCachedAuth() {
+  state.auth = null;
+  window.localStorage.removeItem(AUTH_KEY);
+  window.sessionStorage.removeItem(AUTH_KEY);
+}
+
+function isEmbeddedFromConsole() {
+  if (window.top === window.self) {
+    return false;
+  }
+  return Boolean(
+    state.allowedOrigin &&
+      document.referrer &&
+      document.referrer.startsWith(state.allowedOrigin)
+  );
+}
+
+function isConsoleWindow() {
+  return window.name === CONSOLE_WINDOW_NAME;
+}
+
+function isSessionUsable(session) {
+  if (!session?.exp || Number(session.exp) <= nowSeconds()) {
+    return false;
+  }
+
+  if (session.mode === "manual") {
+    return true;
+  }
+
+  if (session.mode === "console") {
+    return isEmbeddedFromConsole() || isConsoleWindow();
+  }
+
+  return false;
+}
+
 function isAuthenticated() {
-  return window.sessionStorage.getItem(AUTH_KEY) === "qa";
+  return isSessionUsable(state.auth);
 }
 
 function setScreen(screen) {
@@ -70,6 +143,28 @@ async function api(path, options = {}) {
   }
 
   return response.json();
+}
+
+function showLoginMessage(message) {
+  const error = document.querySelector("#loginError");
+  if (!message) {
+    error.hidden = true;
+    error.textContent = "";
+    return;
+  }
+
+  error.textContent = message;
+  error.hidden = false;
+}
+
+function authErrorMessage(reason) {
+  if (reason === "expired") {
+    return "로그인이 만료되었습니다. 다시 로그인해주세요.";
+  }
+  if (reason === "invalid" || reason === "forbidden") {
+    return "통합 콘솔 인증 검증에 실패했습니다. 다시 로그인해주세요.";
+  }
+  return "";
 }
 
 async function fetchRunById(runId) {
@@ -631,7 +726,7 @@ async function saveSchedule() {
   await refresh();
 }
 
-function handleLogin(event) {
+async function handleLogin(event) {
   event.preventDefault();
 
   const id =
@@ -643,29 +738,39 @@ function handleLogin(event) {
   const error =
     document.querySelector("#loginError");
 
-  if (id === "qa" && password === "qa") {
-    window.sessionStorage.setItem(AUTH_KEY, "qa");
-
+  try {
+    const result = await api("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({
+        username: id,
+        password,
+      }),
+    });
+    persistAuth(result.session);
     error.hidden = true;
-
     document.querySelector("#loginForm").reset();
-
     showApp();
-
     return;
+  } catch (_requestError) {
+    error.textContent = "ID 또는 Password가 올바르지 않습니다.";
+    error.hidden = false;
   }
-
-  error.hidden = false;
 
   document.querySelector("#loginPassword").select();
 }
 
-function logout() {
-  window.sessionStorage.removeItem(AUTH_KEY);
+async function logout() {
+  try {
+    await api("/api/auth/logout", { method: "POST" });
+  } catch (_requestError) {}
+
+  clearCachedAuth();
   window.sessionStorage.removeItem(RUN_STATE_KEY);
+  window.name = "";
 
   setPolling(false);
 
+  showLoginMessage("");
   showLoginAfterIntro();
 }
 
@@ -675,7 +780,11 @@ document
 
 document
   .querySelector("#logoutBtn")
-  .addEventListener("click", logout);
+  .addEventListener("click", () => {
+    logout().catch(() => {
+      showLoginAfterIntro();
+    });
+  });
 
 document
   .querySelector("#runBtn")
@@ -706,11 +815,48 @@ document
   .querySelector("#refreshBtn")
   .addEventListener("click", refresh);
 
-window.localStorage.removeItem(AUTH_KEY);
+async function bootstrapAuth() {
+  let bootstrap = {
+    authenticated: false,
+    session: null,
+    allowedOrigin: "",
+    reason: null,
+  };
 
-if (isAuthenticated()) {
+  try {
+    bootstrap = await api("/api/auth/bootstrap");
+  } catch (_requestError) {}
+
+  state.allowedOrigin = bootstrap.allowedOrigin || "";
+
+  const authError = new URLSearchParams(window.location.search).get("auth_error");
+  const errorMessage = authErrorMessage(authError || bootstrap.reason);
+
+  if (bootstrap.session) {
+    persistAuth(bootstrap.session);
+  } else if (!bootstrap.authenticated && !bootstrap.reason) {
+    const cached = readCachedAuth();
+    if (cached) {
+      state.auth = cached;
+    }
+  } else {
+    clearCachedAuth();
+  }
+
+  if (!isAuthenticated()) {
+    clearCachedAuth();
+    setPolling(false);
+    showLoginMessage(errorMessage);
+    showLoginAfterIntro();
+    return;
+  }
+
+  showLoginMessage("");
   loadRunState();
   showApp();
-} else {
-  showLoginAfterIntro();
 }
+
+bootstrapAuth().catch(() => {
+  showLoginMessage("");
+  showLoginAfterIntro();
+});
