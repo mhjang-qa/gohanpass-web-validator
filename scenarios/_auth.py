@@ -967,12 +967,15 @@ async def ensure_logged_in(page: Page):
 
     if not force_login and await has_saved_auth_session(page):
         await log("🔐 저장된 로그인 세션 확인 - 홈 화면 재진입")
-        await go_home_and_wait(page)
-        await close_login_required_popup(page)
-        if await is_logged_in_home(page):
-            await log("🔐 로그인 세션 재사용 완료")
-            await save_auth_state(page)
-            return
+        try:
+            await asyncio.wait_for(go_home_and_wait(page), timeout=15)
+            await close_login_required_popup(page)
+            if await is_logged_in_home(page):
+                await log("🔐 로그인 세션 재사용 완료")
+                await save_auth_state(page)
+                return
+        except Exception as exc:
+            await log(f"🔐 저장된 로그인 세션 재사용 실패: {str(exc).splitlines()[0] or type(exc).__name__}")
         await clear_saved_auth_session(page)
         await log("🔐 저장된 로그인 세션 무효 - 신규 로그인 진행")
 

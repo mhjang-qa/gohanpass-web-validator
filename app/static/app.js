@@ -496,8 +496,34 @@ function markActiveRunMissingFromServer() {
   }
 
   const logs = state.activeRun.logs || [];
-  const message =
+  const recheckMessage =
     "⚠️ 실행 상태가 목록 응답에서 잠시 누락되어 개별 상태를 재확인 중입니다.";
+
+  if (state.activeRun._serverMisses >= 12) {
+    const interruptedMessage =
+      "⚠️ 서버에서 실행 기록을 찾지 못해 실행을 중단 처리했습니다. 새 실행을 시작해주세요.";
+    state.activeRun = {
+      ...state.activeRun,
+      status: "failed",
+      finished_at: new Date().toISOString(),
+      summary: {
+        total: state.activeRun.summary?.total || 0,
+        pass: state.activeRun.summary?.pass || 0,
+        fail: state.activeRun.summary?.fail || 0,
+        na: state.activeRun.summary?.na || 0,
+        error: Math.max(1, Number(state.activeRun.summary?.error || 0)),
+      },
+      progress: {
+        ...(state.activeRun.progress || {}),
+        percent: 100,
+        label: "실행 상태 복구 실패",
+      },
+      logs: logs.includes(interruptedMessage)
+        ? logs
+        : [...logs, interruptedMessage],
+    };
+    return;
+  }
 
   state.activeRun = {
     ...state.activeRun,
@@ -505,7 +531,7 @@ function markActiveRunMissingFromServer() {
       ...(state.activeRun.progress || {}),
       label: "실행 상태 재확인 중",
     },
-    logs: logs.includes(message) ? logs : [...logs, message],
+    logs: logs.includes(recheckMessage) ? logs : [...logs, recheckMessage],
   };
 }
 

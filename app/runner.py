@@ -24,6 +24,16 @@ CURRENT_RUN_ID: str | None = None
 CURRENT_RUN: dict | None = None
 RUN_TASKS: dict[str, asyncio.Task] = {}
 
+
+def scenario_timeout_seconds() -> int:
+    try:
+        return max(60, int(os.getenv("SCENARIO_TIMEOUT_SECONDS", "480")))
+    except ValueError:
+        return 480
+
+
+SCENARIO_TIMEOUT_SECONDS = scenario_timeout_seconds()
+
 TARGET_ENVIRONMENTS = {
     "prod": "https://go.hanpass.com",
     "dev": "https://dev-go.hanpass.com",
@@ -254,7 +264,10 @@ async def execute_run(run: dict, scenario_paths: list[Path], notion_upload: bool
                 scenario_result["type"] = module_type
                 if module_type == "api":
                     update_run_progress(run, scenario_start_percent + 8, f"{path.name} API 검증 실행 중", idx)
-                    raw_results = await module.run()
+                    raw_results = await asyncio.wait_for(
+                        module.run(),
+                        timeout=SCENARIO_TIMEOUT_SECONDS,
+                    )
                 else:
                     if page is None:
                         update_run_progress(run, scenario_start_percent + 5, "브라우저 실행 및 모바일 컨텍스트 준비 중", idx)
@@ -267,7 +280,21 @@ async def execute_run(run: dict, scenario_paths: list[Path], notion_upload: bool
                         snapshot_task = asyncio.create_task(snapshot_loop(run, page, snapshot_stop))
                         append_run_log(run, "🌐 브라우저 준비 완료")
                     update_run_progress(run, scenario_start_percent + 12, f"{path.name} 시나리오 단계 실행 중", idx)
-                    raw_results = await module.run(page)
+                    raw_results = await asyncio.wait_for(
+                        module.run(page),
+                        timeout=SCENARIO_TIMEOUT_SECONDS,
+                    )
+            except asyncio.TimeoutError:
+                raw_results = [
+                    (
+                        "scenario_execution",
+                        f"FAIL (시나리오 실행 제한 시간 {SCENARIO_TIMEOUT_SECONDS}초 초과)",
+                    )
+                ]
+                append_run_log(
+                    run,
+                    f"{path.name} 실패: 시나리오 실행 제한 시간 {SCENARIO_TIMEOUT_SECONDS}초 초과",
+                )
             except Exception as exc:
                 raw_results = [("scenario_execution", f"FAIL ({exc})")]
                 append_run_log(run, f"{path.name} 실패: {exc}")

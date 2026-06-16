@@ -6,36 +6,46 @@ from scenarios._auth import BASE_URL, ensure_logged_in, is_logged_in_home, log, 
 
 
 HOME_URL = BASE_URL
+STEP_TIMEOUT_SECONDS = 60
+OPTIONAL_STEP_TIMEOUT_SECONDS = 35
 
 async def run(page):
     result = []
 
-    async def step(name, func):
+    async def step(name, func, timeout: int = STEP_TIMEOUT_SECONDS):
         try:
             await log(f"▶ {name} 진행 중")
-            await func()
+            await asyncio.wait_for(func(), timeout=timeout)
             result.append((name, "PASS"))
             await log(f"✅ {name} 완료")
             return True
+        except asyncio.TimeoutError:
+            result.append((name, f"FAIL ({timeout}초 내 완료되지 않아 중단)"))
+            await log(f"❌ {name} 실패: {timeout}초 내 완료되지 않아 중단")
+            return False
         except Exception as e:
             result.append((name, f"FAIL ({str(e)})"))
             await log(f"❌ {name} 실패: {str(e)}")
             return False
 
-    async def optional_step(name, func):
+    async def optional_step(name, func, timeout: int = OPTIONAL_STEP_TIMEOUT_SECONDS):
         try:
             await log(f"▶ {name} 진행 중")
-            await func()
+            await asyncio.wait_for(func(), timeout=timeout)
             result.append((name, "PASS"))
             await log(f"✅ {name} 완료")
             return True
+        except asyncio.TimeoutError:
+            result.append((name, f"N/A ({timeout}초 내 완료되지 않아 스킵)"))
+            await log(f"⚪ {name} 스킵: {timeout}초 내 완료되지 않아 스킵")
+            return False
         except Exception as e:
             reason = str(e).splitlines()[0]
             result.append((name, f"N/A ({reason})"))
             await log(f"⚪ {name} 스킵: {reason}")
             return False
 
-    await step("ensure_login", lambda: ensure_logged_in(page))
+    await step("ensure_login", lambda: ensure_logged_in(page), timeout=75)
 
     async def wait_visible(locator, timeout: int = 8000):
         await locator.first.wait_for(state="visible", timeout=timeout)
