@@ -36,6 +36,19 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.mount("/output", StaticFiles(directory=OUTPUT_DIR), name="output")
 
 
+@app.middleware("http")
+async def require_authenticated_session(request: Request, call_next):
+    path = request.url.path
+    public_api = {"/api/auth/login", "/api/auth/logout", "/api/auth/bootstrap"}
+    protected = (path == "/api" or path.startswith("/api/") or
+                 path == "/output" or path.startswith("/output/"))
+    if protected and path not in public_api:
+        session, _ = read_auth_session(request.cookies.get(AUTH_COOKIE))
+        if not session:
+            return JSONResponse({"detail": "login required"}, status_code=401)
+    return await call_next(request)
+
+
 class RunRequest(BaseModel):
     scenarios: list[str]
     notion_upload: bool = True

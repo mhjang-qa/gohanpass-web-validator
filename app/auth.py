@@ -43,7 +43,7 @@ def create_manual_session(user: str) -> dict[str, int | str]:
 
 
 def verify_manual_credentials(username: str, password: str) -> bool:
-    return username == VALIDATOR_USER and password == VALIDATOR_PASSWORD
+    return bool(VALIDATOR_PASSWORD) and username == VALIDATOR_USER and password == VALIDATOR_PASSWORD
 
 
 def issue_auth_cookie(response: Response, session: dict[str, int | str]) -> None:
@@ -81,14 +81,20 @@ def read_auth_session(cookie_value: str | None) -> tuple[dict[str, int | str] | 
     if not isinstance(session, dict):
         return None, "invalid"
 
-    expires_at = int(session.get("exp", 0))
+    try:
+        expires_at = int(session.get("exp", 0))
+    except (TypeError, ValueError, OverflowError):
+        return None, "invalid"
     if expires_at <= int(time.time()):
         return None, "expired"
 
-    if session.get("user") != VALIDATOR_USER:
+    if session.get("mode") not in {"manual", "console"}:
         return None, "invalid"
 
-    if session.get("mode") not in {"manual", "console"}:
+    user = session.get("user")
+    if not isinstance(user, str) or not user:
+        return None, "invalid"
+    if session["mode"] == "manual" and user != VALIDATOR_USER:
         return None, "invalid"
 
     return session, None

@@ -53,7 +53,7 @@ TIMEZONE=Asia/Seoul
 SLACK_WEBHOOK_URL=
 SESSION_SECRET=<validator session secret>
 VALIDATOR_USER=qa
-VALIDATOR_PASSWORD=qa
+VALIDATOR_PASSWORD=<운영 비밀번호>
 QA_CONSOLE_SHARED_SECRET=<console-child 공통 랜덤 문자열>
 QA_CONSOLE_ALLOWED_ORIGIN=https://gohanpass-qa-console.onrender.com
 AUTH_COOKIE_SECURE=true
@@ -242,3 +242,13 @@ Docker 배포 시에도 저장소 내부 `scenarios/`를 그대로 사용합니�
 - `GET /api/schedule`: 스케줄 조회
 - `POST /api/schedule`: 스케줄 저장
 - `GET /output/...`: 스냅샷/출력 파일 정적 접근
+
+## 서버 인증 보강
+
+`VALIDATOR_PASSWORD`가 없으면 수동 로그인을 허용하지 않습니다. 콘솔의 서명된 SSO는 기존대로 사용할 수 있습니다. 실행·스케줄·결과 API 및 `/output/`에는 서버가 발급한 유효한 세션 쿠키가 필요합니다. 외부 API 클라이언트도 먼저 `/api/auth/login`으로 로그인해 쿠키를 보관해야 합니다. 브라우저 저장소의 로그인 표시만으로 API에 접근할 수 없습니다.
+
+검증: `python -m pytest tests/test_auth_boundary.py`
+
+## 의존성 보안 점검 (2026-10-22)
+
+기존 FastAPI 스택을 유지하면서 공개 보안 권고가 있는 고정 의존성을 수정 버전으로 갱신했습니다. FastAPI/Starlette의 보안 수정과 함께 사용 중인 패키지만 업데이트하며, `pip check`와 기존 테스트 또는 로컬 smoke 검증을 수행했습니다. 정확한 버전은 `requirements.txt`를 따릅니다. 새 환경에서 다시 설치한 뒤 배포하세요.
